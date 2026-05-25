@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌿 管理后台</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,'Noto Sans SC','PingFang SC',sans-serif; background:#FDF6EE; color:#4A3F35; }
+.container { max-width:1200px; margin:0 auto; padding:20px; }
+.card { background:#fff; border-radius:16px; padding:24px; box-shadow:0 2px 12px rgba(74,63,53,0.08); margin-bottom:20px; }
+h1 { font-size:1.5em; margin-bottom:24px; }
+h2 { font-size:1.15em; margin-bottom:16px; color:#8B9D83; }
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+@media (max-width:768px) { .grid { grid-template-columns:1fr; } }
+
+.user-tabs { display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
+.user-tab { padding:10px 24px; border:2px solid #E8D5C4; border-radius:10px; background:#fff; cursor:pointer; font-size:0.95em; transition:all 0.2s; }
+.user-tab.active { border-color:#A8C9A5; background:#F0F7EE; font-weight:600; }
+.user-tab:hover { border-color:#A8C9A5; }
+
+.header-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
+.header-bar h1 { margin-bottom:0; }
+
+.stats-value { font-size:2.2em; font-weight:700; color:#8B9D83; }
+.stats-label { font-size:0.85em; color:#9C8B7A; margin-top:4px; }
+
+.chart-container { height:260px; position:relative; }
+
+.login-screen { max-width:400px; margin:120px auto; text-align:center; }
+.login-screen h1 { font-size:1.8em; margin-bottom:8px; }
+.login-screen p { color:#9C8B7A; margin-bottom:24px; }
+.login-screen input { width:100%; padding:14px; border:2px solid #E8D5C4; border-radius:10px; font-size:1em; margin-bottom:16px; outline:none; }
+.login-screen input:focus { border-color:#A8C9A5; }
+.login-screen button { width:100%; padding:14px; background:#A8C9A5; color:#fff; border:none; border-radius:10px; font-size:1.05em; cursor:pointer; transition:background 0.2s; }
+.login-screen button:hover { background:#8B9D83; }
+
+.auth-hidden { display:none; }
+
+.heatmap-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; font-size:0.78em; }
+.heatmap-weekday { text-align:center; color:#9C8B7A; padding:6px 0; font-weight:500; }
+.heatmap-cell {
+  aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+  border-radius:8px; font-size:0.85em; position:relative;
+}
+.heatmap-cell.today { font-weight:700; box-shadow:inset 0 0 0 2px #F4C7AB; }
+.heatmap-cell.future { opacity:0.3; }
+
+.stat-cards { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:20px; }
+.stat-card { background:#fff; border-radius:12px; padding:16px; text-align:center; box-shadow:0 2px 8px rgba(74,63,53,0.06); }
+.stat-card .num { font-size:1.8em; font-weight:700; color:#8B9D83; }
+.stat-card .lbl { font-size:0.82em; color:#9C8B7A; margin-top:4px; }
+
+.detail-table { width:100%; border-collapse:collapse; font-size:0.9em; }
+.detail-table th { text-align:left; padding:10px 6px; border-bottom:2px solid #E8D5C4; color:#9C8B7A; font-weight:500; }
+.detail-table td { padding:10px 6px; border-bottom:1px solid #E8D5C4; }
+.detail-table tr:hover td { background:#FDF6EE; }
+
+.logout-btn {
+  background:none; border:1px solid #E8D5C4; border-radius:8px;
+  padding:8px 20px; cursor:pointer; font-size:0.9em; transition:background 0.2s;
+}
+.logout-btn:hover { background:#F2E8DC; }
+</style>
+</head>
+<body>
+
+<div id="login-screen" class="login-screen">
+  <h1>🔐 管理后台</h1>
+  <p>🌿 一个月变好计划 · 数据看板</p>
+  <input type="password" id="admin-password" placeholder="请输入管理员密码" onkeydown="if(event.key==='Enter')adminLogin()" />
+  <button onclick="adminLogin()">登录</button>
+</div>
+
+<div id="dashboard" class="auth-hidden container">
+  <div class="header-bar">
+    <h1>🌿 一个月变好 · 管理后台</h1>
+    <button class="logout-btn" onclick="logout()">退出登录</button>
+  </div>
+
+  <div class="user-tabs" id="user-tabs"></div>
+
+  <div class="stat-cards" id="stat-cards"></div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>📊 月度热力图</h2>
+      <div id="heatmap-container" style="min-height:200px;"></div>
+    </div>
+    <div class="card">
+      <h2>📈 每周完成率趋势</h2>
+      <div class="chart-container"><canvas id="weeklyChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>🎯 各习惯完成频率</h2>
+      <div class="chart-container"><canvas id="habitChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>🏆 积分 & 奖励</h2>
+      <div id="rewards-summary"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📋 每日打卡详情</h2>
+    <div style="overflow-x:auto;">
+      <table class="detail-table" id="detail-table">
+        <thead><tr><th>日期</th><th>完成项目</th><th>完成数</th></tr></thead>
+        <tbody id="detail-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentUserId = null;
+let dashboardData = null;
+let weeklyChartInstance = null;
+let habitChartInstance = null;
+
+async function adminLogin() {
+  const pw = document.getElementById('admin-password').value;
+  try {
+    const r = await fetch('/api/admin/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({password:pw})
+    });
+    if (!r.ok) throw new Error('密码错误');
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    await loadDashboard();
+  } catch(e) {
+    alert(e.message);
+  }
+}
+
+function logout() {
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'block';
+  document.getElementById('admin-password').value = '';
+  if (weeklyChartInstance) { weeklyChartInstance.destroy(); weeklyChartInstance = null; }
+  if (habitChartInstance) { habitChartInstance.destroy(); habitChartInstance = null; }
+}
+
+async function loadDashboard() {
+  const r = await fetch('/api/admin/dashboard');
+  dashboardData = await r.json();
+  if (dashboardData.length === 0) return;
+  currentUserId = dashboardData[0].id;
+  renderUserTabs();
+  renderCurrentUser();
+}
+
+function renderUserTabs() {
+  const container = document.getElementById('user-tabs');
+  container.innerHTML = dashboardData.map(u =>
+    `<button class="user-tab ${u.id === currentUserId ? 'active' : ''}" onclick="switchUser('${u.id}')">${u.emoji} ${u.display_name}</button>`
+  ).join('');
+}
+
+function switchUser(uid) {
+  currentUserId = uid;
+  renderUserTabs();
+  renderCurrentUser();
+}
+
+function renderCurrentUser() {
+  const user = dashboardData.find(u => u.id === currentUserId);
+  if (!user) return;
+  renderStatCards(user);
+  renderHeatmap(user);
+  renderWeeklyChart(user);
+  renderHabitChart(user);
+  renderRewards(user);
+  renderDailyDetail(user);
+}
+
+function renderStatCards(user) {
+  const freq = user.habit_frequency || {};
+  const totalHabits = Object.keys(freq).length;
+  const totalRecords = Object.values(user.daily_records || {}).reduce((sum, arr) => sum + arr.length, 0);
+  const daysWithRecords = Object.keys(user.daily_records || {}).length;
+  document.getElementById('stat-cards').innerHTML = `
+    <div class="stat-card"><div class="num">${user.total_raw_points}</div><div class="lbl">累计积分</div></div>
+    <div class="stat-card"><div class="num">${totalHabits}</div><div class="lbl">习惯数</div></div>
+    <div class="stat-card"><div class="num">${totalRecords}</div><div class="lbl">总打卡次数</div></div>
+    <div class="stat-card"><div class="num">${daysWithRecords}</div><div class="lbl">打卡天数</div></div>
+  `;
+}
+
+function renderHeatmap(user) {
+  const container = document.getElementById('heatmap-container');
+  const records = user.daily_records || {};
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth() + 1;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const firstDay = new Date(year, month - 1, 1).getDay();
+  const todayStr = today.toISOString().slice(0,10);
+  const hCount = Object.keys(user.habit_frequency || {}).length;
+
+  let html = '<div class="heatmap-grid">';
+  ['日','一','二','三','四','五','六'].forEach(d => { html += `<div class="heatmap-weekday">${d}</div>`; });
+  for (let i = 0; i < firstDay; i++) { html += '<div></div>'; }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dayData = records[dateStr] || [];
+    const doneCount = dayData.length;
+    const isToday = dateStr === todayStr;
+    const isFuture = dateStr > todayStr;
+    const pct = hCount ? Math.round(doneCount / hCount * 100) : 0;
+
+    let bg = '#F2E8DC';
+    if (isFuture) bg = 'transparent';
+    else if (doneCount === hCount && hCount > 0) bg = '#A8C9A5';
+    else if (doneCount > 0) bg = `rgba(168,201,165,${0.2 + (pct / 100) * 0.6})`;
+
+    html += `<div class="heatmap-cell ${isToday ? 'today' : ''} ${isFuture ? 'future' : ''}" style="background:${bg}">${d}</div>`;
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderWeeklyChart(user) {
+  if (weeklyChartInstance) { weeklyChartInstance.destroy(); }
+  const ctx = document.getElementById('weeklyChart').getContext('2d');
+  const records = user.daily_records || {};
+  const today = new Date();
+  const weeks = [];
+  const rates = [];
+
+  for (let w = 7; w >= 0; w--) {
+    let weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - today.getDay() - w * 7);
+    let done = 0, total = 0;
+    const hCount = Object.keys(user.habit_frequency || {}).length;
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      const dateStr = d.toISOString().slice(0,10);
+      const dayData = records[dateStr] || [];
+      done += dayData.length;
+      total += hCount;
+    }
+    const label = w === 0 ? '本周' : `-${w}周`;
+    weeks.push(label);
+    rates.push(total ? Math.round(done / total * 100) : 0);
+  }
+
+  weeklyChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: weeks,
+      datasets: [{
+        label: '完成率',
+        data: rates,
+        borderColor: '#A8C9A5',
+        backgroundColor: 'rgba(168,201,165,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointBackgroundColor: '#8B9D83',
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%' } } },
+      plugins: { legend: { display: false } }
+    }
+  });
+}
+
+function renderHabitChart(user) {
+  if (habitChartInstance) { habitChartInstance.destroy(); }
+  const ctx = document.getElementById('habitChart').getContext('2d');
+  const freq = user.habit_frequency || {};
+  const labels = Object.values(freq).map(h => h.label);
+  const data = Object.values(freq).map(h => h.count);
+  const colors = ['#A8C9A5','#F4C7AB','#E8D5C4','#C4B7A6','#B5D0B2','#D4C4B0','#C9B8A4','#BFC9B6','#DEC4B0'];
+
+  habitChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: colors.slice(0, labels.length),
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } }
+    }
+  });
+}
+
+function renderRewards(user) {
+  const container = document.getElementById('rewards-summary');
+  const rewards = user.rewards || [];
+  container.innerHTML = `
+    <div style="margin-bottom:16px;">
+      <div class="stats-value">${user.total_raw_points}</div>
+      <div class="stats-label">累计原始积分</div>
+    </div>
+    ${rewards.map(r => `
+      <div style="padding:10px 0;border-bottom:1px solid #E8D5C4;display:flex;justify-content:space-between;">
+        <span>${r.label}</span>
+        <span style="color:${r.claimed ? '#8B9D83' : '#9C8B7A'};font-size:0.9em;">
+          ${r.claimed ? '✅ 已兑换' : `需要 ${r.threshold} 分`}
+        </span>
+      </div>
+    `).join('')}
+  `;
+}
+
+function renderDailyDetail(user) {
+  const tbody = document.getElementById('detail-body');
+  const records = user.daily_records || {};
+  const dates = Object.keys(records).sort().reverse().slice(0, 30);
+  tbody.innerHTML = dates.map(date => {
+    const items = records[date] || [];
+    return `<tr><td>${date}</td><td>${items.join(', ') || '-'}</td><td>${items.length}</td></tr>`;
+  }).join('');
+}
+</script>
+</body>
+</html>

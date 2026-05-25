@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="一个月变好">
+<title>🌿 一个月变好</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', 'PingFang SC', sans-serif;
+  background: var(--bg); color: var(--text);
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+button { font-family: inherit; cursor: pointer; }
+input, select { font-family: inherit; }
+
+:root {
+  --bg: #FDF6EE; --bg-card: #FFFFFF; --bg-secondary: #F2E8DC;
+  --accent: #A8C9A5; --accent-dark: #8B9D83; --highlight: #F4C7AB;
+  --border: #E8D5C4; --text: #4A3F35; --text-muted: #9C8B7A;
+  --radius: 16px; --radius-sm: 10px;
+  --shadow: 0 2px 12px rgba(74,63,53,0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #2A2520; --bg-card: #3A3430; --bg-secondary: #322D28;
+    --border: #4A4440; --text: #E8DDD4; --text-muted: #9C8F82;
+    --shadow: 0 2px 12px rgba(0,0,0,0.25);
+  }
+}
+
+.page { display: none; }
+.page.active { display: flex; }
+
+#page-user-select { align-items: center; justify-content: center; min-height: 100dvh; padding: 24px; }
+.user-select-container { text-align: center; }
+.app-title { font-size: 2.2em; margin-bottom: 8px; font-weight: 700; }
+.app-subtitle { color: var(--text-muted); margin-bottom: 36px; font-size: 1em; }
+.user-buttons { display: flex; gap: 20px; justify-content: center; }
+.user-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  background: var(--bg-card); border: 2px solid var(--border);
+  border-radius: var(--radius); padding: 32px 44px;
+  cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: var(--shadow); -webkit-tap-highlight-color: transparent;
+}
+.user-btn:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(74,63,53,0.12); }
+.user-btn:active { transform: scale(0.96); }
+.user-btn-emoji { font-size: 3.2em; }
+.user-btn-label { font-size: 1.2em; font-weight: 600; color: var(--text); }
+
+#page-main { flex-direction: column; min-height: 100dvh; }
+#main-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px; background: var(--bg); position: sticky; top: 0; z-index: 10;
+  border-bottom: 1px solid var(--border);
+}
+.header-left { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1.05em; }
+.header-points { font-weight: 600; color: var(--accent-dark); }
+#main-content { flex: 1; padding: 20px 20px 100px; overflow-y: auto; }
+
+#bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  display: flex; background: var(--bg-card); border-top: 1px solid var(--border);
+  padding: 6px 0; padding-bottom: max(6px, env(safe-area-inset-bottom)); z-index: 20;
+}
+.tab-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: none; border: none; font-size: 0.72em; color: var(--text-muted);
+  cursor: pointer; padding: 4px 0; transition: color 0.2s; -webkit-tap-highlight-color: transparent;
+}
+.tab-btn.active { color: var(--accent-dark); font-weight: 600; }
+.tab-btn span { font-size: 0.85em; }
+
+.section-title { font-size: 1.3em; font-weight: 600; margin-bottom: 16px; margin-top: 4px; }
+.section-subtitle { font-size: 1em; font-weight: 500; margin-bottom: 12px; color: var(--text-muted); }
+
+.loading { text-align: center; padding: 60px 20px; color: var(--text-muted); font-size: 1.1em; }
+
+.checkin-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+.habit-item {
+  display: flex; align-items: center; gap: 16px;
+  background: var(--bg-card); border-radius: var(--radius);
+  padding: 16px 20px; box-shadow: var(--shadow);
+  cursor: pointer; transition: all 0.25s ease;
+  border: 2px solid transparent; -webkit-tap-highlight-color: transparent; user-select: none;
+}
+.habit-item:active { transform: scale(0.97); }
+.habit-item.done { opacity: 0.55; background: var(--bg-secondary); }
+.habit-check {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 2px solid var(--border); display: flex;
+  align-items: center; justify-content: center;
+  font-weight: 700; font-size: 0.9em; flex-shrink: 0;
+  transition: all 0.3s ease; color: transparent;
+}
+.habit-check.checked { background: var(--accent); border-color: var(--accent); color: white; }
+.habit-info { flex: 1; }
+.habit-label { font-size: 1.05em; margin-bottom: 2px; }
+.habit-points { font-size: 0.82em; color: var(--text-muted); }
+
+.daily-summary {
+  background: var(--bg-card); border-radius: var(--radius);
+  padding: 20px; box-shadow: var(--shadow);
+  display: flex; gap: 20px;
+}
+.summary-item { flex: 1; display: flex; flex-direction: column; gap: 4px; text-align: center; }
+.summary-item span { font-size: 0.85em; color: var(--text-muted); }
+.summary-item strong { font-size: 1.3em; }
+
+.stats-card { background: var(--bg-card); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); margin-bottom: 20px; }
+.stat-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 0.95em; }
+.progress-bar { height: 8px; background: var(--bg-secondary); border-radius: 99px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.5s ease; }
+.stat-pct { text-align: right; font-size: 0.85em; color: var(--text-muted); margin-top: 4px; }
+
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 16px; }
+.cal-weekday { text-align: center; font-size: 0.78em; color: var(--text-muted); padding: 8px 0; font-weight: 500; }
+.cal-day {
+  aspect-ratio: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; border-radius: var(--radius-sm); font-size: 0.85em;
+  position: relative; transition: background 0.2s;
+}
+.cal-day.today { border: 2px solid var(--highlight); font-weight: 700; }
+.cal-day.full { background: var(--accent); color: white; font-weight: 600; }
+.cal-day.partial { background: var(--bg-secondary); }
+.cal-day.empty { background: none; }
+.cal-dot { width: 5px; height: 5px; border-radius: 50%; position: absolute; bottom: 5px; }
+.cal-dot.full { background: var(--accent-dark); }
+
+.total-points-card {
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  color: white; border-radius: var(--radius); padding: 24px;
+  text-align: center; margin-bottom: 24px; box-shadow: var(--shadow);
+}
+.total-points-label { display: block; font-size: 0.9em; opacity: 0.85; margin-bottom: 4px; }
+.total-points-value { display: block; font-size: 3em; font-weight: 700; letter-spacing: 2px; }
+.rewards-list { display: flex; flex-direction: column; gap: 12px; }
+.reward-item {
+  background: var(--bg-card); border-radius: var(--radius);
+  padding: 16px 20px; box-shadow: var(--shadow);
+  border: 2px solid var(--border); transition: all 0.3s;
+}
+.reward-item.unlocked { border-color: var(--accent); background: #F0F7EE; }
+.reward-item.claimed { opacity: 0.45; }
+.reward-label { font-size: 1.05em; margin-bottom: 2px; }
+.reward-threshold { font-size: 0.82em; color: var(--text-muted); }
+.reward-bar-track { height: 6px; background: var(--bg-secondary); border-radius: 99px; margin-top: 10px; overflow: hidden; }
+.reward-bar-fill { height: 100%; background: var(--highlight); border-radius: 99px; transition: width 0.5s ease; }
+.claim-btn {
+  margin-top: 12px; background: var(--accent-dark); color: white;
+  border: none; border-radius: var(--radius-sm); padding: 8px 20px;
+  font-size: 0.9em; cursor: pointer; transition: background 0.2s;
+}
+.claim-btn:hover { background: var(--accent); }
+
+.settings-card { background: var(--bg-card); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); margin-bottom: 16px; }
+.setting-title { font-weight: 600; margin-bottom: 12px; }
+.setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.setting-btn {
+  width: 100%; padding: 12px; border: 2px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--bg-card);
+  cursor: pointer; font-size: 0.95em; margin-bottom: 8px;
+  transition: background 0.2s; color: var(--text);
+}
+.setting-btn:hover { background: var(--bg-secondary); }
+.setting-btn.danger { border-color: #E8A0A0; color: #B84A4A; }
+.setting-btn.danger:hover { background: #FFF0F0; }
+.habit-setting {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.habit-setting:last-child { border-bottom: none; }
+.points-badge {
+  background: var(--bg-secondary); padding: 2px 10px;
+  border-radius: 99px; font-size: 0.82em; color: var(--text-muted);
+}
+.habit-actions { display: flex; gap: 8px; align-items: center; }
+.habit-edit-btn, .habit-del-btn {
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 10px; font-size: 0.8em; cursor: pointer; transition: background 0.2s;
+}
+.habit-edit-btn:hover { background: var(--bg-secondary); }
+.habit-del-btn { border-color: #E8A0A0; color: #B84A4A; }
+.habit-del-btn:hover { background: #FFF0F0; }
+
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4); z-index: 100;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.modal-card {
+  background: var(--bg-card); border-radius: var(--radius);
+  padding: 24px; width: 100%; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+}
+.modal-title { font-size: 1.1em; font-weight: 600; margin-bottom: 16px; }
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 0.85em; color: var(--text-muted); margin-bottom: 4px; }
+.form-group input {
+  width: 100%; padding: 10px 12px; border: 2px solid var(--border);
+  border-radius: 8px; font-size: 0.95em; background: var(--bg-card); color: var(--text);
+}
+.form-group input:focus { outline: none; border-color: var(--accent); }
+.modal-actions { display: flex; gap: 12px; margin-top: 20px; }
+.modal-actions button { flex: 1; padding: 10px; border-radius: 8px; font-size: 0.95em; cursor: pointer; }
+.btn-primary {
+  background: var(--accent-dark); color: white; border: none;
+}
+.btn-secondary { background: var(--bg-secondary); color: var(--text); border: 1px solid var(--border); }
+
+.reward-management { margin-top: 16px; }
+.reward-setting {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+}
+.reward-setting:last-child { border-bottom: none; }
+.about-text { text-align: center; color: var(--text-muted); font-size: 0.85em; padding: 24px 0; }
+</style>
+</head>
+<body>
+
+<div id="app">
+<div id="page-user-select" class="page active">
+  <div class="user-select-container">
+    <div class="app-title">🌿 一个月变好</div>
+    <p class="app-subtitle">选一个人开始打卡吧 ✨</p>
+    <div class="user-buttons">
+      <button class="user-btn" onclick="APP.selectUser('me')">
+        <span class="user-btn-emoji">🙋</span>
+        <span class="user-btn-label">我</span>
+      </button>
+      <button class="user-btn" onclick="APP.selectUser('wife')">
+        <span class="user-btn-emoji">🙆‍♀️</span>
+        <span class="user-btn-label">老婆</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="page-main" class="page">
+  <header id="main-header">
+    <div class="header-left">
+      <span id="header-user-emoji"></span>
+      <span id="header-user-name"></span>
+    </div>
+    <span id="header-points" class="header-points">⭐ 0 分</span>
+  </header>
+  <main id="main-content"><div class="loading">加载中...</div></main>
+  <nav id="bottom-nav">
+    <button class="tab-btn active" data-tab="checkin" onclick="APP.switchTab('checkin')">📋<span>打卡</span></button>
+    <button class="tab-btn" data-tab="progress" onclick="APP.switchTab('progress')">📊<span>进度</span></button>
+    <button class="tab-btn" data-tab="rewards" onclick="APP.switchTab('rewards')">🏆<span>奖励</span></button>
+    <button class="tab-btn" data-tab="settings" onclick="APP.switchTab('settings')">⚙️<span>设置</span></button>
+  </nav>
+</div>
+</div>
+
+<script>
+const API = {
+  async login(userId) {
+    const r = await fetch('/api/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: userId})
+    });
+    return r.json();
+  },
+  async toggle(userId, habitKey) {
+    const r = await fetch('/api/toggle', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: userId, habit_key: habitKey})
+    });
+    return r.json();
+  },
+  async getPoints(userId) {
+    const r = await fetch(`/api/points?user_id=${userId}`);
+    return r.json();
+  },
+  async getMonthRecords(userId, year, month) {
+    const r = await fetch(`/api/records/month?user_id=${userId}&year=${year}&month=${month}`);
+    return r.json();
+  },
+  async getWeekStats(userId) {
+    const r = await fetch(`/api/week-stats?user_id=${userId}`);
+    return r.json();
+  },
+  async getHabits(userId) {
+    const r = await fetch(`/api/habits?user_id=${userId}`);
+    return r.json();
+  },
+  async createHabit(userId, key, label, points) {
+    const r = await fetch('/api/habits', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: userId, key, label, points, sort_order: 99})
+    });
+    return r.json();
+  },
+  async deleteHabit(userId, key) {
+    const r = await fetch(`/api/habits/${userId}/${key}`, {method: 'DELETE'});
+    return r.json();
+  },
+  async claimReward(userId, rewardId) {
+    const r = await fetch('/api/rewards/claim', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: userId, reward_id: rewardId})
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'error'); }
+    return r.json();
+  },
+  async createReward(userId, threshold, label) {
+    const r = await fetch('/api/rewards', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: userId, threshold, label})
+    });
+    return r.json();
+  }
+};
+
+const APP = {
+  data: null,
+  currentTab: 'checkin',
+
+  async selectUser(userId) {
+    try {
+      this.data = await API.login(userId);
+      this.renderApp();
+    } catch (e) {
+      alert('连接服务器失败: ' + e.message);
+    }
+  },
+
+  renderApp() {
+    document.getElementById('page-user-select').classList.remove('active');
+    document.getElementById('page-main').classList.add('active');
+    const d = this.data;
+    document.getElementById('header-user-emoji').textContent = d.user.emoji;
+    document.getElementById('header-user-name').textContent = d.user.display_name;
+    this.updateHeader();
+    this.switchTab('checkin');
+  },
+
+  async updateHeader() {
+    try {
+      const pts = await API.getPoints(this.data.user.id);
+      document.getElementById('header-points').textContent = `⭐ ${pts.available} 分`;
+    } catch (_) {}
+  },
+
+  switchTab(tab) {
+    this.currentTab = tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+    if (btn) btn.classList.add('active');
+    this.renderTab(tab);
+  },
+
+  renderTab(tab) {
+    switch (tab) {
+      case 'checkin': this.renderCheckin(); break;
+      case 'progress': this.renderProgress(); break;
+      case 'rewards': this.renderRewards(); break;
+      case 'settings': this.renderSettings(); break;
+    }
+  },
+
+  /* ── Check-in ── */
+  renderCheckin() {
+    const d = this.data;
+    const today = new Date().toISOString().slice(0,10);
+    const habits = d.habits;
+    let html = '<div class="section-title">📋 今日打卡</div><div class="checkin-list">';
+
+    habits.forEach(h => {
+      const done = d._todayRecords && d._todayRecords[h.key];
+      html += `
+        <div class="habit-item ${done ? 'done' : ''}" onclick="APP.toggle('${h.key}')">
+          <div class="habit-check ${done ? 'checked' : ''}">${done ? '✓' : ''}</div>
+          <div class="habit-info">
+            <div class="habit-label">${h.label}</div>
+            <div class="habit-points">+${h.points} 分</div>
+          </div>
+        </div>`;
+    });
+    html += '</div>';
+
+    // Compute today's points
+    let dayPoints = 0;
+    if (d._todayRecords) {
+      habits.forEach(h => { if (d._todayRecords[h.key]) dayPoints += h.points; });
+    }
+    const maxDay = habits.reduce((s, h) => s + h.points, 0);
+
+    html += `
+      <div class="daily-summary">
+        <div class="summary-item"><span>今日得分</span><strong>${dayPoints} / ${maxDay}</strong></div>
+        <div class="summary-item"><span>总积分</span><strong id="checkin-total">加载中...</strong></div>
+      </div>`;
+    document.getElementById('main-content').innerHTML = html;
+
+    API.getPoints(d.user.id).then(pts => {
+      document.getElementById('checkin-total').textContent = pts.available;
+    }).catch(() => {});
+  },
+
+  async toggle(key) {
+    try {
+      await API.toggle(this.data.user.id, key);
+      const loginData = await API.login(this.data.user.id);
+      // Rebuild today's records
+      const today = new Date().toISOString().slice(0,10);
+      const monthRec = await API.getMonthRecords(
+        this.data.user.id,
+        today.slice(0,4),
+        parseInt(today.slice(5,7))
+      );
+      loginData._todayRecords = monthRec[today] ? monthRec[today].habits : {};
+      this.data = loginData;
+      this.updateHeader();
+      this.renderCheckin();
+    } catch (e) {
+      alert('操作失败: ' + e.message);
+    }
+  },
+
+  /* ── Progress ── */
+  async renderProgress() {
+    const d = this.data;
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0,10);
+    const year = today.getFullYear();
+    const month = today.getMonth() + 1;
+    const firstDay = new Date(year, month - 1, 1).getDay();
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const hCount = d.habits.length;
+
+    document.getElementById('main-content').innerHTML = '<div class="loading">加载进度数据...</div>';
+
+    let monthRecords, weekStats;
+    try {
+      [monthRecords, weekStats] = await Promise.all([
+        API.getMonthRecords(d.user.id, year, month),
+        API.getWeekStats(d.user.id),
+      ]);
+    } catch (e) {
+      document.getElementById('main-content').innerHTML = '<div class="loading">加载失败</div>';
+      return;
+    }
+
+    let html = '<div class="section-title">📊 进度总览</div>';
+    html += `
+      <div class="stats-card">
+        <div class="stat-row"><span>📅 本周完成</span><strong>${weekStats.done} / ${weekStats.total}</strong></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${weekStats.pct}%"></div></div>
+        <div class="stat-pct">${weekStats.pct}%</div>
+      </div>`;
+
+    const monthNames = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+    html += `<div class="section-subtitle">${monthNames[month-1]} ${year}</div>`;
+    html += '<div class="calendar-grid">';
+    ['日','一','二','三','四','五','六'].forEach(d => { html += `<div class="cal-weekday">${d}</div>`; });
+    for (let i = 0; i < firstDay; i++) { html += '<div class="cal-day empty"></div>'; }
+
+    let monthDone = 0, monthTotal = 0;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const dayData = monthRecords[dateStr];
+      const doneCount = dayData ? dayData.done_count : 0;
+      const isToday = dateStr === todayStr;
+      const isFuture = dateStr > todayStr;
+      const allDone = doneCount === hCount;
+      const partialDone = doneCount > 0;
+
+      html += `<div class="cal-day ${isToday ? 'today' : ''} ${isFuture ? '' : allDone ? 'full' : partialDone ? 'partial' : ''}">${d}`;
+      if (!isFuture && allDone) html += '<div class="cal-dot full"></div>';
+      html += '</div>';
+      if (!isFuture) { monthDone += doneCount; monthTotal += hCount; }
+    }
+    html += '</div>';
+
+    const monthPct = monthTotal ? Math.round(monthDone / monthTotal * 100) : 0;
+    html += `
+      <div class="stats-card">
+        <div class="stat-row"><span>📈 本月完成率</span><strong>${monthPct}%</strong></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${monthPct}%"></div></div>
+      </div>`;
+    document.getElementById('main-content').innerHTML = html;
+  },
+
+  /* ── Rewards ── */
+  async renderRewards() {
+    const d = this.data;
+    document.getElementById('main-content').innerHTML = '<div class="loading">加载积分数据...</div>';
+    try {
+      const pts = await API.getPoints(d.user.id);
+      const totalPoints = pts.total_raw;
+      let html = '<div class="section-title">🏆 积分 & 奖励</div>';
+      html += `<div class="total-points-card"><span class="total-points-label">累计积分</span><span class="total-points-value">${totalPoints}</span></div>`;
+      html += '<div class="rewards-list">';
+
+      pts.rewards.forEach(r => {
+        const unlocked = totalPoints >= r.threshold;
+        const pct = Math.min(100, Math.round(totalPoints / r.threshold * 100));
+        html += `
+          <div class="reward-item ${r.claimed ? 'claimed' : unlocked ? 'unlocked' : ''}">
+            <div class="reward-info">
+              <div class="reward-label">${r.label}${r.claimed ? ' ✅' : ''}</div>
+              <div class="reward-threshold">需要 ${r.threshold} 分${r.claimed ? ' · 已兑换 🎉' : unlocked ? ' · 已解锁！快去兑换' : ''}</div>
+            </div>
+            <div class="reward-bar-track"><div class="reward-bar-fill" style="width:${pct}%"></div></div>
+            ${unlocked && !r.claimed ? `<button class="claim-btn" onclick="APP.claim(${r.id})">兑换奖励</button>` : ''}
+          </div>`;
+      });
+
+      html += '</div>';
+      document.getElementById('main-content').innerHTML = html;
+    } catch (e) {
+      document.getElementById('main-content').innerHTML = '<div class="loading">加载失败</div>';
+    }
+  },
+
+  async claim(rewardId) {
+    try {
+      await API.claimReward(this.data.user.id, rewardId);
+      this.renderRewards();
+      this.updateHeader();
+    } catch (e) {
+      alert(e.message);
+    }
+  },
+
+  /* ── Settings ── */
+  async renderSettings() {
+    const d = this.data;
+    let html = '<div class="section-title">⚙️ 设置</div>';
+
+    // User
+    html += '<div class="settings-card">';
+    html += `<div class="setting-row"><span>当前用户</span><strong>${d.user.emoji} ${d.user.display_name}</strong></div>`;
+    html += `<button class="setting-btn" onclick="APP.switchUser()">🔄 切换用户</button>`;
+    html += '</div>';
+
+    // Habits management
+    html += '<div class="settings-card">';
+    html += '<div class="setting-title">📝 打卡项目 <button class="habit-edit-btn" onclick="APP.showHabitForm()" style="margin-left:8px;">+ 新增</button></div>';
+    d.habits.forEach(h => {
+      html += `
+        <div class="habit-setting">
+          <span>${h.label}</span>
+          <div class="habit-actions">
+            <span class="points-badge">${h.points} 分</span>
+            <button class="habit-edit-btn" onclick="APP.showHabitForm('${h.key}','${h.label.replace(/'/g,"\\'")}',${h.points})">编辑</button>
+            <button class="habit-del-btn" onclick="APP.deleteHabit('${h.key}')">×</button>
+          </div>
+        </div>`;
+    });
+    html += '</div>';
+
+    // Rewards management
+    html += '<div class="settings-card">';
+    html += '<div class="setting-title">🎁 奖励管理 <button class="habit-edit-btn" onclick="APP.showRewardForm()" style="margin-left:8px;">+ 新增</button></div>';
+    d.rewards.forEach(r => {
+      html += `<div class="reward-setting"><span>${r.label}</span><span style="color:var(--text-muted);font-size:0.85em;">${r.threshold} 分${r.claimed ? ' ✅' : ''}</span></div>`;
+    });
+    html += '</div>';
+
+    // Data
+    html += '<div class="settings-card">';
+    html += `<button class="setting-btn danger" onclick="APP.resetData()">🔄 重置所有数据</button>`;
+    html += '</div>';
+
+    html += '<div class="about-text">🌿 一个月变好计划 v2.0<br>后端版 · 数据云端同步 💪</div>';
+
+    document.getElementById('main-content').innerHTML = html;
+  },
+
+  switchUser() {
+    document.getElementById('page-main').classList.remove('active');
+    document.getElementById('page-user-select').classList.add('active');
+  },
+
+  /* ── Habit Form Modal ── */
+  showHabitForm(key, label, points) {
+    const isEdit = !!key;
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'habit-modal';
+    modal.innerHTML = `
+      <div class="modal-card">
+        <div class="modal-title">${isEdit ? '编辑习惯' : '新增习惯'}</div>
+        <div class="form-group">
+          <label>标识符（英文，唯一）</label>
+          <input id="hf-key" value="${isEdit ? key : ''}" ${isEdit ? 'readonly' : ''} placeholder="如: running" />
+        </div>
+        <div class="form-group">
+          <label>显示名称</label>
+          <input id="hf-label" value="${isEdit ? label : ''}" placeholder="如: 🏃 跑步" />
+        </div>
+        <div class="form-group">
+          <label>积分</label>
+          <input id="hf-points" type="number" value="${isEdit ? points : '10'}" />
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary" onclick="APP.closeModal('habit-modal')">取消</button>
+          <button class="btn-primary" onclick="APP.saveHabit()">保存</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  },
+
+  async saveHabit() {
+    const key = document.getElementById('hf-key').value.trim();
+    const label = document.getElementById('hf-label').value.trim();
+    const points = parseInt(document.getElementById('hf-points').value) || 10;
+    if (!key || !label) { alert('请填写完整'); return; }
+    try {
+      await API.createHabit(this.data.user.id, key, label, points);
+      this.data = await API.login(this.data.user.id);
+      this.closeModal('habit-modal');
+      this.renderSettings();
+    } catch (e) { alert('保存失败: ' + e.message); }
+  },
+
+  async deleteHabit(key) {
+    if (!confirm(`确定删除「${key}」吗？相关打卡记录也会清空。`)) return;
+    try {
+      await API.deleteHabit(this.data.user.id, key);
+      this.data = await API.login(this.data.user.id);
+      this.renderSettings();
+    } catch (e) { alert('删除失败: ' + e.message); }
+  },
+
+  showRewardForm() {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'reward-modal';
+    modal.innerHTML = `
+      <div class="modal-card">
+        <div class="modal-title">新增奖励</div>
+        <div class="form-group">
+          <label>奖励名称</label>
+          <input id="rf-label" placeholder="如: 🍰 吃蛋糕" />
+        </div>
+        <div class="form-group">
+          <label>所需积分</label>
+          <input id="rf-threshold" type="number" value="100" />
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary" onclick="APP.closeModal('reward-modal')">取消</button>
+          <button class="btn-primary" onclick="APP.saveReward()">保存</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  },
+
+  async saveReward() {
+    const label = document.getElementById('rf-label').value.trim();
+    const threshold = parseInt(document.getElementById('rf-threshold').value) || 100;
+    if (!label) { alert('请填写奖励名称'); return; }
+    try {
+      await API.createReward(this.data.user.id, threshold, label);
+      this.data = await API.login(this.data.user.id);
+      this.closeModal('reward-modal');
+      this.renderSettings();
+    } catch (e) { alert('保存失败: ' + e.message); }
+  },
+
+  closeModal(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  },
+
+  async resetData() {
+    if (!confirm('⚠️ 确定要重置所有数据吗？')) return;
+    if (!confirm('再次确认：清空所有打卡记录？')) return;
+    // Reset via deleting all records - simple approach
+    for (const h of this.data.habits) {
+      await API.deleteHabit(this.data.user.id, h.key);
+    }
+    // Recreate defaults
+    const defaults = [
+      {key:'water',label:'💧 喝水 1.5L',points:10},
+      {key:'exercise',label:'🏃 运动 20分钟',points:15},
+      {key:'nophone',label:'📱 22:30前放下手机',points:10},
+      {key:'sugar',label:'🍬 控糖',points:10},
+      {key:'baby',label:'👶 陪宝宝 30-60分钟',points:15},
+      {key:'nophonemeal',label:'🍽️ 吃饭不玩手机',points:5},
+    ];
+    for (const h of defaults) {
+      await API.createHabit(this.data.user.id, h.key, h.label, h.points);
+    }
+    this.data = await API.login(this.data.user.id);
+    this.renderSettings();
+  }
+};
+</script>
+</body>
+</html>
