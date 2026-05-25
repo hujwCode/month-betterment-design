@@ -146,7 +146,7 @@ h2 { font-size:1.15em; margin-bottom:16px; color:#8B9D83; }
       <div class="chart-container"><canvas id="habitChart"></canvas></div>
     </div>
     <div class="card">
-      <h2>🏆 积分 & 奖励</h2>
+      <h2>🏆 积分 & 奖励 <button class="habit-add-btn" onclick="showRewardForm()">+ 新增</button></h2>
       <div id="rewards-summary"></div>
     </div>
   </div>
@@ -204,17 +204,23 @@ function logout() {
 }
 
 /* Auto-login on page load if cached */
-(function() {
+(async function() {
   if (localStorage.getItem('mb_admin')) {
     showDashboard();
-    loadDashboard();
+    try {
+      await loadDashboard();
+    } catch(e) {
+      console.error('Dashboard load failed:', e);
+      logout();
+    }
   }
 })();
 
 async function loadDashboard() {
   const r = await fetch('/api/admin/dashboard');
+  if (!r.ok) throw new Error('Failed to load dashboard');
   dashboardData = await r.json();
-  if (dashboardData.length === 0) return;
+  if (!dashboardData || dashboardData.length === 0) throw new Error('No user data');
   currentUserId = dashboardData[0].id;
   renderUserTabs();
   renderCurrentUser();
@@ -378,15 +384,69 @@ function renderRewards(user) {
       <div class="stats-value">${user.total_raw_points}</div>
       <div class="stats-label">累计原始积分</div>
     </div>
-    ${rewards.map(r => `
-      <div style="padding:10px 0;border-bottom:1px solid #E8D5C4;display:flex;justify-content:space-between;">
-        <span>${r.label}</span>
-        <span style="color:${r.claimed ? '#8B9D83' : '#9C8B7A'};font-size:0.9em;">
-          ${r.claimed ? '✅ 已兑换' : `需要 ${r.threshold} 分`}
-        </span>
+    ${rewards.map((r, i) => `
+      <div style="padding:10px 0;border-bottom:1px solid #E8D5C4;display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <span>${r.label}</span>
+          <span style="color:${r.claimed ? '#8B9D83' : '#9C8B7A'};font-size:0.85em;margin-left:8px;">
+            ${r.claimed ? '✅ 已兑换' : `${r.threshold} 分`}
+          </span>
+        </div>
+        <button class="habit-del-btn2" onclick="deleteReward(${i})" style="font-size:0.8em;padding:2px 8px;">×</button>
       </div>
     `).join('')}
   `;
+}
+
+function showRewardForm() {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'reward-modal';
+  modal.innerHTML = `
+    <div class="modal-card">
+      <div class="modal-title">新增奖励</div>
+      <div class="form-group">
+        <label>奖励名称</label>
+        <input id="rf-label" placeholder="如: 🍰 吃蛋糕" />
+      </div>
+      <div class="form-group">
+        <label>所需积分</label>
+        <input id="rf-threshold" type="number" value="100" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal('reward-modal')">取消</button>
+        <button class="btn-primary" onclick="saveReward()">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function saveReward() {
+  const label = document.getElementById('rf-label').value.trim();
+  const threshold = parseInt(document.getElementById('rf-threshold').value) || 100;
+  if (!label) { alert('请填写完整'); return; }
+  await fetch('/api/rewards', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: currentUserId, threshold, label})
+  });
+  closeModal('reward-modal');
+  await loadDashboard();
+}
+
+async function deleteReward(idx) {
+  const user = dashboardData.find(u => u.id === currentUserId);
+  const rewards = user?.rewards || [];
+  const reward = rewards[idx];
+  if (!reward || !reward.id) { alert('未找到该奖励'); return; }
+  if (reward.claimed) { alert('已兑换的奖励不能删除'); return; }
+  if (!confirm(`确定删除「${reward.label}」？`)) return;
+  await fetch(`/api/rewards/${reward.id}`, {method: 'DELETE'});
+  await loadDashboard();
+}
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
 }
 
 function renderDailyDetail(user) {
@@ -451,7 +511,8 @@ function handleDragEnd(e) {
 
 function handleDrop(e, dropIdx) {
   e.preventDefault();
-  e.target.closest('.habit-item-admin').classList.remove('drag-over');
+  const el = e.target.closest('.habit-item-admin');
+  if (el) el.classList.remove('drag-over');
   if (dragIndex === null || dragIndex === dropIdx) return;
   const item = habitsData.splice(dragIndex, 1)[0];
   habitsData.splice(dropIdx, 0, item);

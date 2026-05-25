@@ -296,6 +296,16 @@ def claim_reward(req: ClaimRequest, db: Session = Depends(get_db)):
     return {"status": "ok"}
 
 
+@app.delete("/api/rewards/{reward_id}")
+def delete_reward(reward_id: int, db: Session = Depends(get_db)):
+    reward = db.query(Reward).filter(Reward.id == reward_id).first()
+    if not reward:
+        raise HTTPException(404, "Reward not found")
+    db.delete(reward)
+    db.commit()
+    return {"status": "ok"}
+
+
 # ── Admin ──
 
 ADMIN_PASSWORD = "admin123"
@@ -344,7 +354,7 @@ def get_admin_dashboard(db: Session = Depends(get_db)):
             "daily_records": record_dates,
             "habit_frequency": habit_freq,
             "rewards": [
-                {"label": r.label, "threshold": r.threshold, "claimed": r.claimed}
+                {"id": r.id, "label": r.label, "threshold": r.threshold, "claimed": r.claimed}
                 for r in user_rewards
             ],
         }

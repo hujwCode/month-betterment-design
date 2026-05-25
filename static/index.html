@@ -552,13 +552,7 @@ const APP = {
     html += `<button class="setting-btn" onclick="APP.switchUser()">🔄 切换用户</button>`;
     html += '</div>';
 
-    // Rewards management
-    html += '<div class="settings-card">';
-    html += '<div class="setting-title">🎁 奖励管理 <button class="habit-edit-btn" onclick="APP.showRewardForm()" style="margin-left:8px;">+ 新增</button></div>';
-    d.rewards.forEach(r => {
-      html += `<div class="reward-setting"><span>${r.label}</span><span style="color:var(--text-muted);font-size:0.85em;">${r.threshold} 分${r.claimed ? ' ✅' : ''}</span></div>`;
-    });
-    html += '</div>';
+
 
     // Data
     html += '<div class="settings-card">';
@@ -574,46 +568,6 @@ const APP = {
     localStorage.removeItem('mb_user');
     document.getElementById('page-main').classList.remove('active');
     document.getElementById('page-user-select').classList.add('active');
-  },
-
-  showRewardForm() {
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.id = 'reward-modal';
-    modal.innerHTML = `
-      <div class="modal-card">
-        <div class="modal-title">新增奖励</div>
-        <div class="form-group">
-          <label>奖励名称</label>
-          <input id="rf-label" placeholder="如: 🍰 吃蛋糕" />
-        </div>
-        <div class="form-group">
-          <label>所需积分</label>
-          <input id="rf-threshold" type="number" value="100" />
-        </div>
-        <div class="modal-actions">
-          <button class="btn-secondary" onclick="APP.closeModal('reward-modal')">取消</button>
-          <button class="btn-primary" onclick="APP.saveReward()">保存</button>
-        </div>
-      </div>`;
-    document.body.appendChild(modal);
-  },
-
-  async saveReward() {
-    const label = document.getElementById('rf-label').value.trim();
-    const threshold = parseInt(document.getElementById('rf-threshold').value) || 100;
-    if (!label) { alert('请填写奖励名称'); return; }
-    try {
-      await API.createReward(this.data.user.id, threshold, label);
-      this.data = await API.login(this.data.user.id);
-      this.closeModal('reward-modal');
-      this.renderSettings();
-    } catch (e) { alert('保存失败: ' + e.message); }
-  },
-
-  closeModal(id) {
-    const el = document.getElementById(id);
-    if (el) el.remove();
   },
 
   async resetData() {
