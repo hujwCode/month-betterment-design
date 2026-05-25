@@ -130,21 +130,35 @@ async function adminLogin() {
       body:JSON.stringify({password:pw})
     });
     if (!r.ok) throw new Error('密码错误');
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('dashboard').style.display = 'block';
+    localStorage.setItem('mb_admin', '1');
+    showDashboard();
     await loadDashboard();
   } catch(e) {
     alert(e.message);
   }
 }
 
+function showDashboard() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+}
+
 function logout() {
+  localStorage.removeItem('mb_admin');
   document.getElementById('dashboard').style.display = 'none';
   document.getElementById('login-screen').style.display = 'block';
   document.getElementById('admin-password').value = '';
   if (weeklyChartInstance) { weeklyChartInstance.destroy(); weeklyChartInstance = null; }
   if (habitChartInstance) { habitChartInstance.destroy(); habitChartInstance = null; }
 }
+
+/* Auto-login on page load if cached */
+(function() {
+  if (localStorage.getItem('mb_admin')) {
+    showDashboard();
+    loadDashboard();
+  }
+})();
 
 async function loadDashboard() {
   const r = await fetch('/api/admin/dashboard');
