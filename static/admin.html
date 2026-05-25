@@ -62,6 +62,52 @@ h2 { font-size:1.15em; margin-bottom:16px; color:#8B9D83; }
   padding:8px 20px; cursor:pointer; font-size:0.9em; transition:background 0.2s;
 }
 .logout-btn:hover { background:#F2E8DC; }
+
+.habit-item-admin {
+  display:flex; align-items:center; gap:12px; padding:10px 12px;
+  border:1px solid #E8D5C4; border-radius:10px; margin-bottom:8px;
+  background:#fff; cursor:grab; transition:box-shadow 0.2s, opacity 0.2s;
+  user-select:none;
+}
+.habit-item-admin:hover { box-shadow:0 2px 8px rgba(74,63,53,0.1); }
+.habit-item-admin.dragging { opacity:0.5; }
+.habit-item-admin.drag-over { border-color:#A8C9A5; background:#F0F7EE; }
+.habit-item-admin .drag-handle { cursor:grab; color:#C4B7A6; font-size:1.2em; padding:0 4px; }
+.habit-item-admin .habit-info { flex:1; }
+.habit-item-admin .habit-pts { background:#F2E8DC; padding:2px 10px; border-radius:99px; font-size:0.82em; color:#9C8B7A; }
+.habit-edit-btn2, .habit-del-btn2 {
+  background:none; border:1px solid #E8D5C4; border-radius:6px;
+  padding:4px 12px; cursor:pointer; font-size:0.82em; transition:background 0.2s;
+}
+.habit-edit-btn2:hover { background:#F2E8DC; }
+.habit-del-btn2 { border-color:#E8A0A0; color:#B84A4A; }
+.habit-del-btn2:hover { background:#FFF0F0; }
+.habit-add-btn {
+  background:#A8C9A5; color:#fff; border:none; border-radius:8px;
+  padding:4px 14px; cursor:pointer; font-size:0.85em; float:right; margin-top:2px;
+}
+.habit-add-btn:hover { background:#8B9D83; }
+.modal-overlay {
+  position:fixed; top:0; left:0; right:0; bottom:0;
+  background:rgba(0,0,0,0.4); z-index:100;
+  display:flex; align-items:center; justify-content:center; padding:20px;
+}
+.modal-card {
+  background:#fff; border-radius:16px; padding:24px;
+  width:100%; max-width:400px; box-shadow:0 8px 32px rgba(0,0,0,0.15);
+}
+.modal-title { font-size:1.1em; font-weight:600; margin-bottom:16px; }
+.form-group { margin-bottom:14px; }
+.form-group label { display:block; font-size:0.85em; color:#9C8B7A; margin-bottom:4px; }
+.form-group input {
+  width:100%; padding:10px 12px; border:2px solid #E8D5C4;
+  border-radius:8px; font-size:0.95em; outline:none;
+}
+.form-group input:focus { border-color:#A8C9A5; }
+.modal-actions { display:flex; gap:12px; margin-top:20px; }
+.modal-actions button { flex:1; padding:10px; border-radius:8px; font-size:0.95em; cursor:pointer; }
+.btn-primary { background:#8B9D83; color:white; border:none; }
+.btn-secondary { background:#F2E8DC; color:#4A3F35; border:1px solid #E8D5C4; }
 </style>
 </head>
 <body>
@@ -103,6 +149,11 @@ h2 { font-size:1.15em; margin-bottom:16px; color:#8B9D83; }
       <h2>🏆 积分 & 奖励</h2>
       <div id="rewards-summary"></div>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>📝 习惯管理 <button class="habit-add-btn" onclick="showHabitForm()">+ 新增</button></h2>
+    <div id="habit-list"></div>
   </div>
 
   <div class="card">
@@ -167,6 +218,7 @@ async function loadDashboard() {
   currentUserId = dashboardData[0].id;
   renderUserTabs();
   renderCurrentUser();
+  loadHabits();
 }
 
 function renderUserTabs() {
@@ -345,6 +397,128 @@ function renderDailyDetail(user) {
     const items = records[date] || [];
     return `<tr><td>${date}</td><td>${items.join(', ') || '-'}</td><td>${items.length}</td></tr>`;
   }).join('');
+}
+
+/* ── Habit Management (Admin) ── */
+
+let habitsData = [];
+
+async function loadHabits() {
+  const r = await fetch('/api/habits?user_id=me');
+  habitsData = await r.json();
+  renderHabitList();
+}
+
+function renderHabitList() {
+  const container = document.getElementById('habit-list');
+  if (!habitsData.length) {
+    container.innerHTML = '<div style="color:#9C8B7A;text-align:center;padding:20px;">暂无习惯，点击上方「+ 新增」添加</div>';
+    return;
+  }
+  container.innerHTML = habitsData.map((h, i) => `
+    <div class="habit-item-admin" draggable="true"
+         data-key="${h.key}"
+         ondragstart="handleDragStart(event, ${i})"
+         ondragover="handleDragOver(event, ${i})"
+         ondragend="handleDragEnd(event)"
+         ondrop="handleDrop(event, ${i})">
+      <span class="drag-handle">⠿</span>
+      <span class="habit-info">${h.label}</span>
+      <span class="habit-pts">${h.points} 分</span>
+      <button class="habit-edit-btn2" onclick="showHabitForm('${h.key}','${h.label.replace(/'/g,"\\'")}',${h.points})">编辑</button>
+      <button class="habit-del-btn2" onclick="deleteHabit('${h.key}','${h.label.replace(/'/g,"\\'")}')">×</button>
+    </div>
+  `).join('');
+}
+
+let dragIndex = null;
+
+function handleDragStart(e, idx) {
+  dragIndex = idx;
+  e.target.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function handleDragOver(e, idx) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+}
+
+function handleDragEnd(e) {
+  e.target.classList.remove('dragging');
+  document.querySelectorAll('.habit-item-admin').forEach(el => el.classList.remove('drag-over'));
+}
+
+function handleDrop(e, dropIdx) {
+  e.preventDefault();
+  e.target.closest('.habit-item-admin').classList.remove('drag-over');
+  if (dragIndex === null || dragIndex === dropIdx) return;
+  const item = habitsData.splice(dragIndex, 1)[0];
+  habitsData.splice(dropIdx, 0, item);
+  dragIndex = null;
+  renderHabitList();
+  saveOrder();
+}
+
+async function saveOrder() {
+  const ordered = habitsData.map((h, i) => ({key: h.key, sort_order: i}));
+  await fetch('/api/habits/reorder', {
+    method: 'PUT', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({habits: ordered})
+  });
+}
+
+function showHabitForm(key, label, points) {
+  const isEdit = !!key;
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'habit-modal';
+  modal.innerHTML = `
+    <div class="modal-card">
+      <div class="modal-title">${isEdit ? '编辑习惯' : '新增习惯'}</div>
+      <div class="form-group">
+        <label>标识符（英文，唯一，保存后不可修改）</label>
+        <input id="hf-key" value="${isEdit ? key : ''}" ${isEdit ? 'readonly' : ''} placeholder="如: running" />
+      </div>
+      <div class="form-group">
+        <label>显示名称</label>
+        <input id="hf-label" value="${isEdit ? label : ''}" placeholder="如: 🏃 跑步" />
+      </div>
+      <div class="form-group">
+        <label>积分</label>
+        <input id="hf-points" type="number" value="${isEdit ? points : '10'}" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal('habit-modal')">取消</button>
+        <button class="btn-primary" onclick="saveHabit()">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function saveHabit() {
+  const key = document.getElementById('hf-key').value.trim();
+  const label = document.getElementById('hf-label').value.trim();
+  const points = parseInt(document.getElementById('hf-points').value) || 10;
+  if (!key || !label) { alert('请填写完整'); return; }
+  await fetch('/api/habits', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: 'me', key, label, points, sort_order: 99})
+  });
+  closeModal('habit-modal');
+  await loadHabits();
+}
+
+async function deleteHabit(key, label) {
+  if (!confirm(`确定删除「${label}」？所有用户的此习惯和相关记录都会被清空。`)) return;
+  if (!confirm('再次确认：此操作不可撤销。')) return;
+  await fetch(`/api/habits/${key}`, {method: 'DELETE'});
+  await loadHabits();
+}
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
 }
 </script>
 </body>

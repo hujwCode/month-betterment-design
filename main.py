@@ -82,6 +82,13 @@ class ClaimRequest(BaseModel):
 class AdminLogin(BaseModel):
     password: str
 
+class ReorderItem(BaseModel):
+    key: str
+    sort_order: int
+
+class ReorderRequest(BaseModel):
+    habits: list[ReorderItem]
+
 
 # ── User / Habits ──
 
@@ -110,6 +117,8 @@ def api_login(req: LoginRequest, db: Session = Depends(get_db)):
     }
 
 
+ALL_USERS = ["me", "wife"]
+
 @app.get("/api/habits")
 def get_habits(user_id: str, db: Session = Depends(get_db)):
     habits = db.query(Habit).filter(Habit.user_id == user_id).order_by(Habit.sort_order).all()
@@ -121,34 +130,46 @@ def get_habits(user_id: str, db: Session = Depends(get_db)):
 
 @app.post("/api/habits")
 def create_habit(req: HabitCreate, db: Session = Depends(get_db)):
-    existing = db.query(Habit).filter(
-        Habit.user_id == req.user_id, Habit.key == req.key
-    ).first()
-    if existing:
-        existing.label = req.label
-        existing.points = req.points
-        existing.sort_order = req.sort_order
-    else:
-        db.add(Habit(
-            user_id=req.user_id, key=req.key,
-            label=req.label, points=req.points,
-            sort_order=req.sort_order,
-        ))
+    for uid in ALL_USERS:
+        existing = db.query(Habit).filter(
+            Habit.user_id == uid, Habit.key == req.key
+        ).first()
+        if existing:
+            existing.label = req.label
+            existing.points = req.points
+            existing.sort_order = req.sort_order
+        else:
+            db.add(Habit(
+                user_id=uid, key=req.key,
+                label=req.label, points=req.points,
+                sort_order=req.sort_order,
+            ))
     db.commit()
     return {"status": "ok"}
 
 
-@app.delete("/api/habits/{user_id}/{key}")
-def delete_habit(user_id: str, key: str, db: Session = Depends(get_db)):
-    habit = db.query(Habit).filter(
-        Habit.user_id == user_id, Habit.key == key
-    ).first()
-    if not habit:
-        raise HTTPException(404, "Habit not found")
-    db.query(Record).filter(
-        Record.user_id == user_id, Record.habit_key == key
-    ).delete()
-    db.delete(habit)
+@app.delete("/api/habits/{key}")
+def delete_habit(key: str, db: Session = Depends(get_db)):
+    for uid in ALL_USERS:
+        db.query(Record).filter(
+            Record.user_id == uid, Record.habit_key == key
+        ).delete()
+        db.query(Habit).filter(
+            Habit.user_id == uid, Habit.key == key
+        ).delete()
+    db.commit()
+    return {"status": "ok"}
+
+
+@app.put("/api/habits/reorder")
+def reorder_habits(req: ReorderRequest, db: Session = Depends(get_db)):
+    for uid in ALL_USERS:
+        for item in req.habits:
+            habit = db.query(Habit).filter(
+                Habit.user_id == uid, Habit.key == item.key
+            ).first()
+            if habit:
+                habit.sort_order = item.sort_order
     db.commit()
     return {"status": "ok"}
 
