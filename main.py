@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import calendar
 
 from database import init_db, get_db, SessionLocal
@@ -92,6 +92,10 @@ def api_login(req: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(404, "User not found")
     habits = db.query(Habit).filter(Habit.user_id == req.user_id).order_by(Habit.sort_order).all()
     rewards = db.query(Reward).filter(Reward.user_id == req.user_id).order_by(Reward.sort_order).all()
+    today = date.today().isoformat()
+    today_records = db.query(Record).filter(
+        Record.user_id == req.user_id, Record.date == today
+    ).all()
     return {
         "user": {"id": user.id, "display_name": user.display_name, "emoji": user.emoji},
         "habits": [
@@ -102,6 +106,7 @@ def api_login(req: LoginRequest, db: Session = Depends(get_db)):
             {"id": r.id, "threshold": r.threshold, "label": r.label, "claimed": r.claimed}
             for r in rewards
         ],
+        "today_records": {r.habit_key: True for r in today_records},
     }
 
 

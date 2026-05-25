@@ -325,10 +325,23 @@ const APP = {
   async selectUser(userId) {
     try {
       this.data = await API.login(userId);
+      localStorage.setItem('mb_user', userId);
       this.renderApp();
     } catch (e) {
       alert('连接服务器失败: ' + e.message);
     }
+  },
+
+  async autoLogin() {
+    const saved = localStorage.getItem('mb_user');
+    if (saved) {
+      try {
+        this.data = await API.login(saved);
+        this.renderApp();
+        return true;
+      } catch (_) {}
+    }
+    return false;
   },
 
   renderApp() {
@@ -342,10 +355,8 @@ const APP = {
   },
 
   async updateHeader() {
-    try {
-      const pts = await API.getPoints(this.data.user.id);
-      document.getElementById('header-points').textContent = `⭐ ${pts.available} 分`;
-    } catch (_) {}
+    const pts = await API.getPoints(this.data.user.id);
+    document.getElementById('header-points').textContent = `⭐ ${pts.available} 分`;
   },
 
   switchTab(tab) {
@@ -368,12 +379,12 @@ const APP = {
   /* ── Check-in ── */
   renderCheckin() {
     const d = this.data;
-    const today = new Date().toISOString().slice(0,10);
+    const records = d.today_records || {};
     const habits = d.habits;
     let html = '<div class="section-title">📋 今日打卡</div><div class="checkin-list">';
 
     habits.forEach(h => {
-      const done = d._todayRecords && d._todayRecords[h.key];
+      const done = records[h.key];
       html += `
         <div class="habit-item ${done ? 'done' : ''}" onclick="APP.toggle('${h.key}')">
           <div class="habit-check ${done ? 'checked' : ''}">${done ? '✓' : ''}</div>
@@ -385,42 +396,42 @@ const APP = {
     });
     html += '</div>';
 
-    // Compute today's points
     let dayPoints = 0;
-    if (d._todayRecords) {
-      habits.forEach(h => { if (d._todayRecords[h.key]) dayPoints += h.points; });
-    }
+    habits.forEach(h => { if (records[h.key]) dayPoints += h.points; });
     const maxDay = habits.reduce((s, h) => s + h.points, 0);
 
     html += `
       <div class="daily-summary">
         <div class="summary-item"><span>今日得分</span><strong>${dayPoints} / ${maxDay}</strong></div>
-        <div class="summary-item"><span>总积分</span><strong id="checkin-total">加载中...</strong></div>
+        <div class="summary-item"><span>总积分</span><strong>${d._pointsCache || '...'}</strong></div>
       </div>`;
     document.getElementById('main-content').innerHTML = html;
 
     API.getPoints(d.user.id).then(pts => {
+      d._pointsCache = pts.available;
       document.getElementById('checkin-total').textContent = pts.available;
-    }).catch(() => {});
+    });
   },
 
   async toggle(key) {
+    // Optimistic local update first
+    const d = this.data;
+    const records = d.today_records || {};
+    records[key] = !records[key];
+    d.today_records = records;
+    this.renderCheckin();
+
+    // Fire API in background
     try {
-      await API.toggle(this.data.user.id, key);
-      const loginData = await API.login(this.data.user.id);
-      // Rebuild today's records
-      const today = new Date().toISOString().slice(0,10);
-      const monthRec = await API.getMonthRecords(
-        this.data.user.id,
-        today.slice(0,4),
-        parseInt(today.slice(5,7))
-      );
-      loginData._todayRecords = monthRec[today] ? monthRec[today].habits : {};
-      this.data = loginData;
+      await API.toggle(d.user.id, key);
+      // Update points cache
+      const pts = await API.getPoints(d.user.id);
+      d._pointsCache = pts.available;
       this.updateHeader();
-      this.renderCheckin();
     } catch (e) {
-      alert('操作失败: ' + e.message);
+      // Revert on failure
+      records[key] = !records[key];
+      this.renderCheckin();
     }
   },
 
@@ -576,6 +587,7 @@ const APP = {
   },
 
   switchUser() {
+    localStorage.removeItem('mb_user');
     document.getElementById('page-main').classList.remove('active');
     document.getElementById('page-user-select').classList.add('active');
   },
@@ -694,6 +706,23 @@ const APP = {
     this.renderSettings();
   }
 };
+
+/* ── Init: auto-login on page load ── */
+(function init() {
+  const saved = localStorage.getItem('mb_user');
+  if (saved) {
+    document.getElementById('page-user-select').classList.remove('active');
+    document.getElementById('page-main').classList.add('active');
+    API.login(saved).then(data => {
+      APP.data = data;
+      APP.renderApp();
+    }).catch(() => {
+      localStorage.removeItem('mb_user');
+      document.getElementById('page-user-select').classList.add('active');
+      document.getElementById('page-main').classList.remove('active');
+    });
+  }
+})();
 </script>
 </body>
 </html>
