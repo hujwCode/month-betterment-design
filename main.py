@@ -4,8 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
+import logging
 from datetime import date, datetime, timedelta
 import calendar
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 from database import init_db, get_db, SessionLocal
 from models import User, Habit, Record, Reward
@@ -178,18 +182,26 @@ def reorder_habits(req: ReorderRequest, db: Session = Depends(get_db)):
 
 @app.post("/api/toggle")
 def toggle_habit(req: ToggleRequest, db: Session = Depends(get_db)):
-    today = datetime.now().strftime("%Y-%m-%d")
-    record = db.query(Record).filter(
-        Record.user_id == req.user_id,
-        Record.habit_key == req.habit_key,
-        Record.date == today,
-    ).first()
-    if record:
-        db.delete(record)
-    else:
-        db.add(Record(user_id=req.user_id, habit_key=req.habit_key, date=today))
-    db.commit()
-    return {"status": "ok"}
+    try:
+        today = datetime.now().strftime("%Y-%m-%d")
+        record = db.query(Record).filter(
+            Record.user_id == req.user_id,
+            Record.habit_key == req.habit_key,
+            Record.date == today,
+        ).first()
+        if record:
+            db.delete(record)
+            msg = "deleted"
+        else:
+            db.add(Record(user_id=req.user_id, habit_key=req.habit_key, date=today))
+            msg = "created"
+        db.commit()
+        logger.info(f"Toggle {req.user_id}/{req.habit_key}: {msg}")
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Toggle failed: {e}")
+        db.rollback()
+        raise HTTPException(500, str(e))
 
 
 @app.get("/api/records/month")
