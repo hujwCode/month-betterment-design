@@ -72,42 +72,26 @@ def _sync_shared_habit_config(db: Session):
 
 
 def _sync_shared_reward_config(db: Session):
-    """Keep reward thresholds and labels shared while preserving per-user claims."""
+    """Mirror the primary user's reward list for the other user."""
     source_rewards = db.query(Reward).filter(
         Reward.user_id == CONFIG_USER_ID
     ).order_by(Reward.sort_order, Reward.threshold).all()
-    source_orders = set()
 
     for order, source in enumerate(source_rewards):
         source.sort_order = order
-        source_orders.add(order)
-        for uid in ALL_USERS:
-            if uid == CONFIG_USER_ID:
-                continue
-            target = db.query(Reward).filter(
-                Reward.user_id == uid,
-                Reward.sort_order == order,
-            ).first()
-            if target:
-                target.threshold = source.threshold
-                target.label = source.label
-            else:
-                db.add(Reward(
-                    user_id=uid,
-                    threshold=source.threshold,
-                    label=source.label,
-                    sort_order=order,
-                ))
 
     for uid in ALL_USERS:
         if uid == CONFIG_USER_ID:
             continue
-        extras = db.query(Reward).filter(
-            Reward.user_id == uid,
-            Reward.sort_order.notin_(source_orders),
-        ).all()
-        for reward in extras:
-            db.delete(reward)
+        db.query(Reward).filter(Reward.user_id == uid).delete()
+        for source in source_rewards:
+            db.add(Reward(
+                user_id=uid,
+                threshold=source.threshold,
+                label=source.label,
+                claimed=source.claimed,
+                sort_order=source.sort_order,
+            ))
 
 
 @app.on_event("startup")
