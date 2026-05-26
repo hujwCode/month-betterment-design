@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="一个月变好">
-<title>🌿 一个月变好</title>
+<title>一个月变好</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -225,7 +225,7 @@ input, select { font-family: inherit; }
 <div id="app">
 <div id="page-user-select" class="page active">
   <div class="user-select-container">
-    <div class="app-title">🌿 一个月变好</div>
+    <div class="app-title">一个月变好</div>
     <p class="app-subtitle">选一个人开始打卡吧 ✨</p>
     <div class="user-buttons">
       <button class="user-btn" onclick="APP.selectUser('me')">
@@ -233,8 +233,8 @@ input, select { font-family: inherit; }
         <span class="user-btn-label">我</span>
       </button>
       <button class="user-btn" onclick="APP.selectUser('wife')">
-        <span class="user-btn-emoji">🙆‍♀️</span>
-        <span class="user-btn-label">老婆</span>
+        <span class="user-btn-emoji">👑</span>
+        <span class="user-btn-label">女王大人</span>
       </button>
     </div>
   </div>
@@ -559,7 +559,7 @@ const APP = {
     html += `<button class="setting-btn danger" onclick="APP.resetData()">🔄 重置所有数据</button>`;
     html += '</div>';
 
-    html += '<div class="about-text">🌿 一个月变好计划 v2.0<br>后端版 · 数据云端同步 💪</div>';
+    html += '<div class="about-text">一个月变好计划 v2.0<br>后端版 · 数据云端同步 💪</div>';
 
     document.getElementById('main-content').innerHTML = html;
   },

@@ -29,9 +29,14 @@ app.add_middleware(
 def on_startup():
     init_db()
     db = SessionLocal()
-    for uid, name, emoji in [("me", "我", "🙋"), ("wife", "老婆", "🙆‍♀️")]:
-        if not db.query(User).filter(User.id == uid).first():
+    for uid, name, emoji in [("me", "我", "🙋"), ("wife", "女王大人", "👑")]:
+        user = db.query(User).filter(User.id == uid).first()
+        if not user:
             db.add(User(id=uid, display_name=name, emoji=emoji))
+        else:
+            # Update existing users to keep display names current
+            user.display_name = name
+            user.emoji = emoji
     default_habits = [
         ("water", "💧 喝水 1.5L", 10, 0),
         ("exercise", "🏃 运动 20分钟", 15, 1),
@@ -40,7 +45,7 @@ def on_startup():
         ("baby", "👶 陪宝宝 30-60分钟", 15, 4),
         ("nophonemeal", "🍽️ 吃饭不玩手机", 5, 5),
     ]
-    for uid, _, _ in [("me", "我", "🙋"), ("wife", "老婆", "🙆‍♀️")]:
+    for uid, _, _ in [("me", "我", "🙋"), ("wife", "女王大人", "👑")]:
         for key, label, pts, order in default_habits:
             if not db.query(Habit).filter(Habit.user_id == uid, Habit.key == key).first():
                 db.add(Habit(user_id=uid, key=key, label=label, points=pts, sort_order=order))
@@ -50,7 +55,7 @@ def on_startup():
         (400, "🍽️ 去一家想去的餐厅", 2),
         (700, "🏕️ 周末短途旅行", 3),
     ]
-    for uid, _, _ in [("me", "我", "🙋"), ("wife", "老婆", "🙆‍♀️")]:
+    for uid, _, _ in [("me", "我", "🙋"), ("wife", "女王大人", "👑")]:
         for thresh, label, order in default_rewards:
             if not db.query(Reward).filter(Reward.user_id == uid, Reward.threshold == thresh).first():
                 db.add(Reward(user_id=uid, threshold=thresh, label=label, sort_order=order))
