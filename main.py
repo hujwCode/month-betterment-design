@@ -353,6 +353,23 @@ def update_reward(reward_id: int, req: RewardCreate, db: Session = Depends(get_d
     return {"status": "ok"}
 
 
+class RewardReorderItem(BaseModel):
+    id: int
+    sort_order: int
+
+class RewardReorderRequest(BaseModel):
+    rewards: list[RewardReorderItem]
+
+@app.put("/api/rewards/reorder")
+def reorder_rewards(req: RewardReorderRequest, db: Session = Depends(get_db)):
+    for item in req.rewards:
+        reward = db.query(Reward).filter(Reward.id == item.id).first()
+        if reward:
+            reward.sort_order = item.sort_order
+    db.commit()
+    return {"status": "ok"}
+
+
 @app.delete("/api/rewards/{reward_id}")
 def delete_reward(reward_id: int, db: Session = Depends(get_db)):
     reward = db.query(Reward).filter(Reward.id == reward_id).first()
