@@ -166,20 +166,20 @@ h2 { font-size:1.15em; margin-bottom:16px; color:var(--accent-dark); }
     </div>
   </div>
 
+  <div class="card">
+    <h2>🎯 各习惯完成频率</h2>
+    <div class="chart-container"><canvas id="habitChart"></canvas></div>
+  </div>
+
   <div class="grid">
     <div class="card">
-      <h2>🎯 各习惯完成频率</h2>
-      <div class="chart-container"><canvas id="habitChart"></canvas></div>
+      <h2>📝 习惯管理 <button class="habit-add-btn" onclick="showHabitForm()">+ 新增</button></h2>
+      <div id="habit-list"></div>
     </div>
     <div class="card">
       <h2>🏆 积分 & 奖励 <button class="habit-add-btn" onclick="showRewardForm()">+ 新增</button></h2>
       <div id="rewards-summary"></div>
     </div>
-  </div>
-
-  <div class="card">
-    <h2>📝 习惯管理 <button class="habit-add-btn" onclick="showHabitForm()">+ 新增</button></h2>
-    <div id="habit-list"></div>
   </div>
 
   <div class="card">
@@ -199,6 +199,7 @@ let dashboardData = null;
 let weeklyChartInstance = null;
 let habitChartInstance = null;
 let selectedDate = null;
+let editingRewardIdx = null;
 
 async function adminLogin() {
   const pw = document.getElementById('admin-password').value;
@@ -451,36 +452,46 @@ function renderRewards(user) {
   container.innerHTML = `
     <div style="margin-bottom:16px;">
       <div class="stats-value">${user.total_raw_points}</div>
-      <div class="stats-label">累计原始积分</div>
+      <div class="stats-label">累计积分</div>
     </div>
     ${rewards.map((r, i) => `
       <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
         <div>
           <span>${r.label}</span>
-          <span style="color:${r.claimed ? 'var(--accent-dark)' : 'var(--text-muted)'};font-size:0.85em;margin-left:8px;">
-            ${r.claimed ? '✅ 已兑换' : `${r.threshold} 分`}
+          <span style="color:${r.claimed ? 'var(--accent-dark)' : 'var(--text-muted)'};font-size:0.82em;margin-left:6px;">
+            ${r.claimed ? '✅' : `${r.threshold} 分`}
           </span>
         </div>
-        <button class="habit-del-btn2" onclick="deleteReward(${i})" style="font-size:0.8em;padding:2px 8px;">×</button>
+        <div style="display:flex;gap:4px;">
+          <button class="habit-edit-btn2" onclick="showRewardForm(${i})" style="font-size:0.78em;">✏️</button>
+          <button class="habit-del-btn2" onclick="deleteReward(${i})" style="font-size:0.78em;">×</button>
+        </div>
       </div>
     `).join('')}
   `;
 }
 
-function showRewardForm() {
+let editingRewardIdx = null;
+
+function showRewardForm(idx) {
+  const user = dashboardData.find(u => u.id === currentUserId);
+  const reward = (idx !== undefined && user?.rewards) ? user.rewards[idx] : null;
+  editingRewardIdx = reward ? idx : null;
+  const isEdit = !!reward;
+
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'reward-modal';
   modal.innerHTML = `
     <div class="modal-card">
-      <div class="modal-title">新增奖励</div>
+      <div class="modal-title">${isEdit ? '编辑奖励' : '新增奖励'}</div>
       <div class="form-group">
         <label>奖励名称</label>
-        <input id="rf-label" placeholder="如: 🍰 吃蛋糕" />
+        <input id="rf-label" value="${isEdit ? reward.label.replace(/'/g,"&#39;") : ''}" placeholder="如: 🍰 吃蛋糕" />
       </div>
       <div class="form-group">
         <label>所需积分</label>
-        <input id="rf-threshold" type="number" value="100" />
+        <input id="rf-threshold" type="number" value="${isEdit ? reward.threshold : ''}" placeholder="如: 100" />
       </div>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeModal('reward-modal')">取消</button>
@@ -492,12 +503,25 @@ function showRewardForm() {
 
 async function saveReward() {
   const label = document.getElementById('rf-label').value.trim();
-  const threshold = parseInt(document.getElementById('rf-threshold').value) || 100;
-  if (!label) { alert('请填写完整'); return; }
-  await fetch('/api/rewards', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({user_id: currentUserId, threshold, label})
-  });
+  const threshold = parseInt(document.getElementById('rf-threshold').value) || 0;
+  if (!label || !threshold) { alert('请填写完整'); return; }
+
+  if (editingRewardIdx !== null) {
+    const user = dashboardData.find(u => u.id === currentUserId);
+    const reward = user?.rewards?.[editingRewardIdx];
+    if (reward && reward.id) {
+      await fetch('/api/rewards/' + reward.id, {
+        method: 'PUT', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_id: currentUserId, threshold, label})
+      });
+    }
+    editingRewardIdx = null;
+  } else {
+    await fetch('/api/rewards', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: currentUserId, threshold, label})
+    });
+  }
   closeModal('reward-modal');
   await loadDashboard();
 }

@@ -342,6 +342,17 @@ def claim_reward(req: ClaimRequest, db: Session = Depends(get_db)):
     return {"status": "ok"}
 
 
+@app.put("/api/rewards/{reward_id}")
+def update_reward(reward_id: int, req: RewardCreate, db: Session = Depends(get_db)):
+    reward = db.query(Reward).filter(Reward.id == reward_id).first()
+    if not reward:
+        raise HTTPException(404, "Reward not found")
+    reward.threshold = req.threshold
+    reward.label = req.label
+    db.commit()
+    return {"status": "ok"}
+
+
 @app.delete("/api/rewards/{reward_id}")
 def delete_reward(reward_id: int, db: Session = Depends(get_db)):
     reward = db.query(Reward).filter(Reward.id == reward_id).first()
@@ -375,7 +386,7 @@ def get_admin_dashboard(db: Session = Depends(get_db)):
     for u in users:
         user_habits = [h for h in all_habits if h.user_id == u.id]
         user_records = [r for r in all_records if r.user_id == u.id]
-        user_rewards = [r for r in all_rewards if r.user_id == u.id]
+        user_rewards = sorted([r for r in all_rewards if r.user_id == u.id], key=lambda r: r.threshold)
 
         total_raw = 0
         record_dates = {}
