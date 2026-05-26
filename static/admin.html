@@ -449,21 +449,23 @@ function renderHabitChart(user) {
 function renderRewards(user) {
   const container = document.getElementById('rewards-summary');
   const rewards = user.rewards || [];
+  const claimedCount = rewards.filter(r => r.claimed).length;
   container.innerHTML = `
-    <div style="margin-bottom:16px;">
-      <div class="stats-value">${user.total_raw_points}</div>
-      <div class="stats-label">累计积分</div>
+    <div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <span style="font-size:1.5em;font-weight:700;color:var(--accent-dark);">${user.total_raw_points}</span>
+        <span class="stats-label"> 分</span>
+      </div>
+      <span style="font-size:0.82em;color:var(--text-muted);">已兑换 ${claimedCount}/${rewards.length}</span>
     </div>
-    ${rewards.length === 0 ? '<div style="color:var(--text-muted);text-align:center;padding:20px;">暂无奖励，点击上方「+ 新增」添加</div>' : ''}
     ${rewards.map((r, i) => `
-      <div class="habit-item-admin" draggable="true"
-           data-reward-idx="${i}"
-           ondragstart="handleRewardDragStart(event, ${i})"
-           ondragover="handleRewardDragOver(event, ${i})"
-           ondragend="handleRewardDragEnd(event)"
-           ondrop="handleRewardDrop(event, ${i})">
-        <span class="drag-handle">⠿</span>
-        <span class="habit-info">${r.label}${r.claimed ? ' ✅' : ''}</span>
+      <div class="habit-item-admin" style="cursor:default;">
+        <span class="habit-info">
+          ${r.label}
+          <span style="color:${r.claimed ? 'var(--accent-dark)' : 'var(--text-muted)'};font-size:0.82em;margin-left:4px;">
+            ${r.claimed ? '✅' : ''}
+          </span>
+        </span>
         <span class="habit-pts">${r.threshold} 分</span>
         <button class="habit-edit-btn2" onclick="showRewardForm(${i})">编辑</button>
         <button class="habit-del-btn2" onclick="deleteReward(${i})">×</button>
@@ -584,50 +586,11 @@ function renderHabitList() {
 }
 
 let dragIndex = null;
-let rewardDragIndex = null;
 
 function handleDragStart(e, idx) {
   dragIndex = idx;
   e.target.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
-}
-
-function handleRewardDragStart(e, idx) {
-  rewardDragIndex = idx;
-  e.target.classList.add('dragging');
-  e.dataTransfer.effectAllowed = 'move';
-}
-
-function handleRewardDragOver(e, idx) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-}
-
-function handleRewardDragEnd(e) {
-  e.target.classList.remove('dragging');
-}
-
-function handleRewardDrop(e, dropIdx) {
-  e.preventDefault();
-  const el = e.target.closest('.habit-item-admin');
-  if (el) el.classList.remove('drag-over');
-  if (rewardDragIndex === null || rewardDragIndex === dropIdx) return;
-  const user = dashboardData.find(u => u.id === currentUserId);
-  if (!user) return;
-  const rewards = user.rewards;
-  const item = rewards.splice(rewardDragIndex, 1)[0];
-  rewards.splice(dropIdx, 0, item);
-  rewardDragIndex = null;
-  renderRewards(user);
-  saveRewardOrder(user.rewards);
-}
-
-async function saveRewardOrder(rewards) {
-  const ordered = rewards.map((r, i) => ({id: r.id, sort_order: i}));
-  await fetch('/api/rewards/reorder', {
-    method: 'PUT', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({rewards: ordered})
-  });
 }
 
 function handleDragOver(e, idx) {
