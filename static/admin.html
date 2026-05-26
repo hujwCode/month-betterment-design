@@ -471,8 +471,6 @@ function renderRewards(user) {
   `;
 }
 
-let editingRewardIdx = null;
-
 function showRewardForm(idx) {
   const user = dashboardData.find(u => u.id === currentUserId);
   const reward = (idx !== undefined && user?.rewards) ? user.rewards[idx] : null;
