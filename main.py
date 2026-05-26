@@ -361,7 +361,7 @@ def get_admin_dashboard(db: Session = Depends(get_db)):
         habit_freq = {}
         for h in user_habits:
             count = len([r for r in user_records if r.habit_key == h.key])
-            habit_freq[h.key] = {"label": h.label, "count": count, "points": h.points}
+            habit_freq[h.key] = {"label": h.label, "count": count, "points": h.points, "sort_order": h.sort_order}
 
         users_data[u.id] = {
             "id": u.id,

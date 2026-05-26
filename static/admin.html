@@ -326,7 +326,7 @@ function showDateDetail(dateStr) {
 
   const freq = user.habit_frequency || {};
   const dayRecords = (user.daily_records || {})[dateStr] || [];
-  const allHabits = Object.entries(freq).sort((a, b) => a[1].label.localeCompare(b[1].label));
+  const allHabits = Object.entries(freq).sort((a, b) => (a[1].sort_order ?? 99) - (b[1].sort_order ?? 99));
 
   const container = document.getElementById('date-detail');
   container.style.display = 'block';
