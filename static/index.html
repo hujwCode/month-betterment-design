@@ -158,6 +158,13 @@ input, select { font-family: inherit; }
 .cal-dot { width: 5px; height: 5px; border-radius: 50%; position: absolute; bottom: 5px; }
 .cal-dot.full { background: var(--accent-dark); }
 
+.stats-combo { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px; }
+.stats-item { background:var(--bg-card); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow); text-align:center; }
+.stats-item-label { font-size:0.85em; color:var(--text-muted); margin-bottom:4px; }
+.stats-item-pct { font-size:1.6em; font-weight:700; color:var(--accent-dark); }
+.stats-item-detail { font-size:0.8em; color:var(--text-muted); margin-bottom:8px; }
+.stats-item .progress-bar { margin-top:4px; }
+
 .total-points-card {
   background: linear-gradient(135deg, var(--accent), var(--accent-dark));
   color: white; border-radius: var(--radius); padding: 24px;
@@ -498,13 +505,8 @@ const APP = {
     }
 
     let html = '<div class="section-title">📊 进度总览</div>';
-    html += `
-      <div class="stats-card">
-        <div class="stat-row"><span>📅 本周完成</span><strong>${weekStats.done} / ${weekStats.total}</strong></div>
-        <div class="progress-bar"><div class="progress-fill" style="width:${weekStats.pct}%"></div></div>
-        <div class="stat-pct">${weekStats.pct}%</div>
-      </div>`;
 
+    // Calendar on top
     const monthNames = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
     html += `<div class="section-subtitle">${monthNames[month-1]} ${year}</div>`;
     html += '<div class="calendar-grid">';
@@ -520,7 +522,6 @@ const APP = {
       const isFuture = dateStr > todayStr;
       const allDone = doneCount === hCount;
       const partialDone = doneCount > 0;
-
       html += `<div class="cal-day ${isToday ? 'today' : ''} ${isFuture ? '' : allDone ? 'full' : partialDone ? 'partial' : ''}">${d}`;
       if (!isFuture && allDone) html += '<div class="cal-dot full"></div>';
       html += '</div>';
@@ -528,12 +529,25 @@ const APP = {
     }
     html += '</div>';
 
+    // Weekly + Monthly stats together
     const monthPct = monthTotal ? Math.round(monthDone / monthTotal * 100) : 0;
+    html += '<div class="stats-combo">';
     html += `
-      <div class="stats-card">
-        <div class="stat-row"><span>📈 本月完成率</span><strong>${monthPct}%</strong></div>
+      <div class="stats-item">
+        <div class="stats-item-label">📅 本周</div>
+        <div class="stats-item-pct">${weekStats.pct}%</div>
+        <div class="stats-item-detail">${weekStats.done}/${weekStats.total}</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${weekStats.pct}%"></div></div>
+      </div>`;
+    html += `
+      <div class="stats-item">
+        <div class="stats-item-label">📈 本月</div>
+        <div class="stats-item-pct">${monthPct}%</div>
+        <div class="stats-item-detail">完成率</div>
         <div class="progress-bar"><div class="progress-fill" style="width:${monthPct}%"></div></div>
       </div>`;
+    html += '</div>';
+
     document.getElementById('main-content').innerHTML = html;
   },
 

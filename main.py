@@ -111,7 +111,7 @@ def api_login(req: LoginRequest, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(404, "User not found")
     habits = db.query(Habit).filter(Habit.user_id == req.user_id).order_by(Habit.sort_order).all()
-    rewards = db.query(Reward).filter(Reward.user_id == req.user_id).order_by(Reward.sort_order).all()
+    rewards = db.query(Reward).filter(Reward.user_id == req.user_id).order_by(Reward.threshold).all()
     today = date.today().isoformat()
     today_records = db.query(Record).filter(
         Record.user_id == req.user_id, Record.date == today
@@ -277,7 +277,7 @@ def _calc_points(user_id: str, db: Session):
 @app.get("/api/points")
 def get_points(user_id: str, db: Session = Depends(get_db)):
     total_raw, redeemed, available = _calc_points(user_id, db)
-    rewards = db.query(Reward).filter(Reward.user_id == user_id).order_by(Reward.sort_order).all()
+    rewards = db.query(Reward).filter(Reward.user_id == user_id).order_by(Reward.threshold).all()
     # Weekly stats for milestone bonus
     today = datetime.now()
     weekday = today.weekday()
