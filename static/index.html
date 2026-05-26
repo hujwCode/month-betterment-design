@@ -32,6 +32,33 @@ input, select { font-family: inherit; }
   }
 }
 
+/* ── Tab transition ── */
+#main-content { animation: fadeSlideIn 0.3s ease; }
+@keyframes fadeSlideIn {
+  from { opacity:0; transform:translateY(8px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* ── Skeleton loading ── */
+.skeleton { background:linear-gradient(90deg,var(--bg-secondary) 25%,var(--border) 50%,var(--bg-secondary) 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:var(--radius); }
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+.skel-bar { height:18px; margin-bottom:12px; border-radius:8px; }
+.skel-card { height:68px; margin-bottom:12px; border-radius:var(--radius); }
+
+/* ── Celebration overlay ── */
+.celebrate-overlay { position:fixed; top:0; left:0; right:0; bottom:0; z-index:200; pointer-events:none; }
+.celebrate-particle { position:absolute; animation:particleFall 2s ease-out forwards; font-size:1.5em; }
+@keyframes particleFall {
+  0%   { opacity:1; transform:translateY(-40px) rotate(0deg) scale(1); }
+  70%  { opacity:1; }
+  100% { opacity:0; transform:translateY(100vh) rotate(720deg) scale(0.3); }
+}
+
+/* ── User select ceremony ── */
+.user-select-top { margin-bottom:48px; }
+.user-select-date { font-size:1em; color:var(--text-muted); margin-bottom:8px; }
+.user-select-motto { font-size:0.9em; color:var(--accent-dark); font-style:italic; }
+
 .page { display: none; }
 .page.active { display: flex; }
 
@@ -225,8 +252,12 @@ input, select { font-family: inherit; }
 <div id="app">
 <div id="page-user-select" class="page active">
   <div class="user-select-container">
-    <div class="app-title">一个月变好</div>
-    <p class="app-subtitle">选一个人开始打卡吧 ✨</p>
+    <div class="user-select-top">
+      <div class="user-select-date" id="welcome-date"></div>
+      <div class="app-title">一个月变好</div>
+      <div class="user-select-motto" id="daily-motto"></div>
+    </div>
+    <p class="app-subtitle">选一个人开始打卡</p>
     <div class="user-buttons">
       <button class="user-btn" onclick="APP.selectUser('me')">
         <span class="user-btn-emoji">🙋</span>
@@ -248,7 +279,7 @@ input, select { font-family: inherit; }
     </div>
     <span id="header-points" class="header-points">⭐ 0 分</span>
   </header>
-  <main id="main-content"><div class="loading">加载中...</div></main>
+  <main id="main-content"><div class="skeleton skel-card" style="width:90%;margin:20px auto;"></div><div class="skeleton skel-card" style="width:85%;margin:20px auto;"></div><div class="skeleton skel-card" style="width:80%;margin:20px auto;"></div><div class="skeleton skel-card" style="width:75%;margin:20px auto;"></div><div class="skeleton skel-card" style="width:70%;margin:20px auto;"></div></main>
   <nav id="bottom-nav">
     <button class="tab-btn active" data-tab="checkin" onclick="APP.switchTab('checkin')">📋<span>打卡</span></button>
     <button class="tab-btn" data-tab="progress" onclick="APP.switchTab('progress')">📊<span>进度</span></button>
@@ -428,6 +459,7 @@ const APP = {
       const pts = await API.getPoints(d.user.id);
       d._pointsCache = pts.available;
       this.updateHeader();
+      checkCelebrate();
     } catch (e) {
       // Revert on failure
       records[key] = !records[key];
@@ -446,7 +478,7 @@ const APP = {
     const daysInMonth = new Date(year, month, 0).getDate();
     const hCount = d.habits.length;
 
-    document.getElementById('main-content').innerHTML = '<div class="loading">加载进度数据...</div>';
+    document.getElementById('main-content').innerHTML = '<div class="skeleton skel-bar" style="width:60%;"></div><div class="skeleton skel-card"></div><div class="skeleton" style="height:200px;margin-bottom:20px;"></div>';
 
     let monthRecords, weekStats;
     try {
@@ -455,7 +487,7 @@ const APP = {
         API.getWeekStats(d.user.id),
       ]);
     } catch (e) {
-      document.getElementById('main-content').innerHTML = '<div class="loading">加载失败</div>';
+      document.getElementById('main-content').innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--text-muted);font-size:1em;">加载失败，请检查网络</div>';
       return;
     }
 
@@ -502,7 +534,7 @@ const APP = {
   /* ── Rewards ── */
   async renderRewards() {
     const d = this.data;
-    document.getElementById('main-content').innerHTML = '<div class="loading">加载积分数据...</div>';
+    document.getElementById('main-content').innerHTML = '<div class="skeleton skel-bar" style="width:50%;"></div><div class="skeleton" style="height:120px;margin-bottom:16px;border-radius:var(--radius);"></div><div class="skeleton skel-card"></div><div class="skeleton skel-card"></div>';
     try {
       const pts = await API.getPoints(d.user.id);
       const totalPoints = pts.total_raw;
@@ -527,7 +559,7 @@ const APP = {
       html += '</div>';
       document.getElementById('main-content').innerHTML = html;
     } catch (e) {
-      document.getElementById('main-content').innerHTML = '<div class="loading">加载失败</div>';
+      document.getElementById('main-content').innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--text-muted);font-size:1em;">加载失败，请检查网络</div>';
     }
   },
 
@@ -594,8 +626,45 @@ const APP = {
   }
 };
 
+/* ── Welcome page content ── */
+const MOTTOS = ['坚持就是胜利 💪','今天的努力是明天的礼物 🎁','每一天都值得认真对待 ✨','变好的路上，你并不孤单 🌸','小小的坚持，大大的改变 🌱'];
+function initWelcomePage() {
+  const now = new Date();
+  const weekDays = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+  const months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  document.getElementById('welcome-date').textContent = `${months[now.getMonth()]}${now.getDate()}日 ${weekDays[now.getDay()]}`;
+  document.getElementById('daily-motto').textContent = MOTTOS[now.getDate() % MOTTOS.length];
+}
+
+/* ── Celebration check ── */
+function checkCelebrate() {
+  const d = APP.data;
+  if (!d) return;
+  const records = d.today_records || {};
+  const allDone = d.habits.every(h => records[h.key]);
+  if (!allDone) return;
+
+  const colors = ['#A8C9A5','#F4C7AB','#E8D5C4','#8B9D83','#D4C4B0','#FFF8DC','#FFD700'];
+  const particles = ['🌟','✨','🎉','🎊','💫','⭐','🌸','🍀','💎','🔥'];
+  const overlay = document.createElement('div');
+  overlay.className = 'celebrate-overlay';
+  for (let i = 0; i < 30; i++) {
+    const p = document.createElement('span');
+    p.className = 'celebrate-particle';
+    p.textContent = particles[i % particles.length];
+    p.style.left = Math.random() * 100 + '%';
+    p.style.animationDelay = Math.random() * 1.2 + 's';
+    p.style.animationDuration = (1.5 + Math.random() * 2) + 's';
+    p.style.fontSize = (1 + Math.random() * 2) + 'em';
+    overlay.appendChild(p);
+  }
+  document.body.appendChild(overlay);
+  setTimeout(() => overlay.remove(), 3000);
+}
+
 /* ── Init: auto-login on page load ── */
 (function init() {
+  initWelcomePage();
   const saved = localStorage.getItem('mb_user');
   if (saved) {
     document.getElementById('page-user-select').classList.remove('active');
