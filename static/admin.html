@@ -46,6 +46,18 @@ h2 { font-size:1.15em; margin-bottom:16px; color:#8B9D83; }
 }
 .heatmap-cell.today { font-weight:700; box-shadow:inset 0 0 0 2px #F4C7AB; }
 .heatmap-cell.future { opacity:0.3; }
+.heatmap-cell.clickable { cursor:pointer; transition:transform 0.15s; }
+.heatmap-cell.clickable:hover { transform:scale(1.15); z-index:1; }
+.heatmap-cell.selected { box-shadow:inset 0 0 0 3px #F4C7AB, 0 2px 8px rgba(0,0,0,0.2); }
+
+.date-detail-card { margin-top:16px; background:#FDF6EE; border-radius:12px; padding:16px 20px; }
+.date-detail-card h3 { font-size:1em; margin-bottom:12px; color:#8B9D83; }
+.date-habit-item { display:flex; align-items:center; gap:10px; padding:6px 0; }
+.date-habit-item .dh-check { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.8em; font-weight:700; }
+.date-habit-item .dh-check.done { background:#A8C9A5; color:white; }
+.date-habit-item .dh-check.undone { background:#E8D5C4; color:white; }
+.date-habit-item .dh-label { flex:1; font-size:0.9em; }
+.date-habit-item .dh-points { font-size:0.8em; color:#9C8B7A; }
 
 .stat-cards { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:20px; }
 .stat-card { background:#fff; border-radius:12px; padding:16px; text-align:center; box-shadow:0 2px 8px rgba(74,63,53,0.06); }
@@ -133,6 +145,7 @@ h2 { font-size:1.15em; margin-bottom:16px; color:#8B9D83; }
     <div class="card">
       <h2>📊 月度热力图</h2>
       <div id="heatmap-container" style="min-height:200px;"></div>
+      <div id="date-detail" class="date-detail-card" style="display:none;"></div>
     </div>
     <div class="card">
       <h2>📈 每周完成率趋势</h2>
@@ -172,6 +185,7 @@ let currentUserId = null;
 let dashboardData = null;
 let weeklyChartInstance = null;
 let habitChartInstance = null;
+let selectedDate = null;
 
 async function adminLogin() {
   const pw = document.getElementById('admin-password').value;
@@ -236,6 +250,8 @@ function renderUserTabs() {
 
 function switchUser(uid) {
   currentUserId = uid;
+  selectedDate = null;
+  document.getElementById('date-detail').style.display = 'none';
   renderUserTabs();
   renderCurrentUser();
 }
@@ -285,6 +301,7 @@ function renderHeatmap(user) {
     const doneCount = dayData.length;
     const isToday = dateStr === todayStr;
     const isFuture = dateStr > todayStr;
+    const isSelected = dateStr === selectedDate;
     const pct = hCount ? Math.round(doneCount / hCount * 100) : 0;
 
     let bg = '#F2E8DC';
@@ -292,10 +309,47 @@ function renderHeatmap(user) {
     else if (doneCount === hCount && hCount > 0) bg = '#A8C9A5';
     else if (doneCount > 0) bg = `rgba(168,201,165,${0.2 + (pct / 100) * 0.6})`;
 
-    html += `<div class="heatmap-cell ${isToday ? 'today' : ''} ${isFuture ? 'future' : ''}" style="background:${bg}">${d}</div>`;
+    const onclick = isFuture ? '' : `onclick="showDateDetail('${dateStr}')"`;
+    html += `<div class="heatmap-cell ${isToday ? 'today' : ''} ${isFuture ? '' : 'clickable'} ${isSelected ? 'selected' : ''}" style="background:${bg}" ${onclick}>${d}</div>`;
   }
   html += '</div>';
   container.innerHTML = html;
+
+  // Refresh detail if a date is selected
+  if (selectedDate) showDateDetail(selectedDate);
+}
+
+function showDateDetail(dateStr) {
+  selectedDate = dateStr;
+  const user = dashboardData.find(u => u.id === currentUserId);
+  if (!user) return;
+
+  const freq = user.habit_frequency || {};
+  const dayRecords = (user.daily_records || {})[dateStr] || [];
+  const allHabits = Object.entries(freq).sort((a, b) => a[1].label.localeCompare(b[1].label));
+
+  const container = document.getElementById('date-detail');
+  container.style.display = 'block';
+
+  const doneCount = dayRecords.length;
+  const totalCount = allHabits.length;
+  const dayPoints = allHabits.reduce((sum, [key, info]) => sum + (dayRecords.includes(key) ? info.points : 0), 0);
+
+  container.innerHTML = `
+    <h3>📅 ${dateStr} · ${doneCount}/${totalCount} 完成 · ${dayPoints} 分</h3>
+    ${allHabits.map(([key, info]) => {
+      const done = dayRecords.includes(key);
+      return `
+        <div class="date-habit-item">
+          <div class="dh-check ${done ? 'done' : 'undone'}">${done ? '✓' : '·'}</div>
+          <span class="dh-label">${info.label}</span>
+          <span class="dh-points">${done ? '+' + info.points : '—'}</span>
+        </div>`;
+    }).join('')}
+  `;
+
+  // Refresh heatmap to show selected cell
+  renderHeatmap(user);
 }
 
 function renderWeeklyChart(user) {
