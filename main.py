@@ -50,10 +50,14 @@ def on_startup():
             if not db.query(Habit).filter(Habit.user_id == uid, Habit.key == key).first():
                 db.add(Habit(user_id=uid, key=key, label=label, points=pts, sort_order=order))
     default_rewards = [
-        (100, "🍦 一起吃个冰淇淋", 0),
-        (200, "🎲 一起玩桌游/游戏之夜", 1),
-        (400, "🍽️ 去一家想去的餐厅", 2),
-        (700, "🏕️ 周末短途旅行", 3),
+        (50, "🍵 一杯想喝的饮品", 0),
+        (100, "🍦 一起吃个冰淇淋", 1),
+        (200, "🎲 一起玩桌游/游戏之夜", 2),
+        (350, "🛀 一次放松SPA时光", 3),
+        (500, "🍽️ 去一家想去的餐厅", 4),
+        (750, "🛍️ 买一件喜欢的衣服", 5),
+        (1000, "🏕️ 周末短途旅行", 6),
+        (1500, "🎁 一个心愿礼物", 7),
     ]
     for uid, _, _ in [("me", "我", "🙋"), ("wife", "女王大人", "👑")]:
         for thresh, label, order in default_rewards:
@@ -274,6 +278,22 @@ def _calc_points(user_id: str, db: Session):
 def get_points(user_id: str, db: Session = Depends(get_db)):
     total_raw, redeemed, available = _calc_points(user_id, db)
     rewards = db.query(Reward).filter(Reward.user_id == user_id).order_by(Reward.sort_order).all()
+    # Weekly stats for milestone bonus
+    today = datetime.now()
+    weekday = today.weekday()
+    week_start = datetime(today.year, today.month, today.day - weekday)
+    habit_keys = [h.key for h in db.query(Habit).filter(Habit.user_id == user_id).all()]
+    total_possible = len(habit_keys)
+    week_done = 0
+    week_records = []
+    for i in range(7):
+        d = (week_start + timedelta(days=i)).strftime("%Y-%m-%d")
+        records = db.query(Record).filter(Record.user_id == user_id, Record.date == d).all()
+        week_done += len(records)
+        week_records.append(d)
+    week_pct = round(week_done / (total_possible * 7) * 100) if total_possible else 0
+    week_qualifies = week_pct >= 70
+    week_number = today.isocalendar()[1]
     return {
         "total_raw": total_raw,
         "redeemed": redeemed,
@@ -282,6 +302,15 @@ def get_points(user_id: str, db: Session = Depends(get_db)):
             {"id": r.id, "threshold": r.threshold, "label": r.label, "claimed": r.claimed}
             for r in rewards
         ],
+        "weekly": {
+            "week": week_number,
+            "done": week_done,
+            "total": total_possible * 7,
+            "pct": week_pct,
+            "qualifies": week_qualifies,
+            "bonus_points": 30,
+            "claimed_this_week": False,
+        },
     }
 
 

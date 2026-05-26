@@ -184,6 +184,12 @@ input, select { font-family: inherit; }
 }
 .claim-btn:hover { background: var(--accent); }
 
+.weekly-card { background:linear-gradient(135deg,var(--bg-card),var(--bg-secondary)); border-radius:var(--radius); padding:18px 20px; box-shadow:var(--shadow); margin-bottom:20px; border:2px solid var(--border); }
+.weekly-header { font-weight:600; margin-bottom:10px; color:var(--accent-dark); }
+.weekly-sub { font-size:0.82em; color:var(--text-muted); margin-top:4px; }
+.weekly-badge { margin-top:10px; padding:8px 14px; background:var(--accent); color:white; border-radius:8px; font-size:0.9em; font-weight:600; text-align:center; }
+.weekly-tip { margin-top:6px; font-size:0.82em; color:var(--text-muted); }
+
 .settings-card { background: var(--bg-card); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); margin-bottom: 16px; }
 .setting-title { font-weight: 600; margin-bottom: 12px; }
 .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
@@ -538,25 +544,41 @@ const APP = {
     try {
       const pts = await API.getPoints(d.user.id);
       const totalPoints = pts.total_raw;
+      const weekly = pts.weekly || {};
+
       let html = '<div class="section-title">🏆 积分 & 奖励</div>';
       html += `<div class="total-points-card"><span class="total-points-label">累计积分</span><span class="total-points-value">${totalPoints}</span></div>`;
-      html += '<div class="rewards-list">';
 
+      // Weekly milestone card
+      html += '<div class="weekly-card">';
+      html += '<div class="weekly-header">📅 第 ' + weekly.week + ' 周 · 坚持奖励</div>';
+      html += `<div class="stat-row"><span>本周完成率</span><strong style="font-size:1.1em;">${weekly.pct}%</strong></div>`;
+      html += `<div class="progress-bar" style="margin-bottom:8px;"><div class="progress-fill" style="width:${weekly.pct}%"></div></div>`;
+      html += `<div class="weekly-sub">${weekly.done}/${weekly.total} 项完成 · 70% 以上解锁</div>`;
+      if (weekly.pct >= 70) {
+        html += `<div class="weekly-badge">🎉 已达 70%！奖励 ⭐ +30 分已生效</div>`;
+      } else {
+        html += `<div class="weekly-tip">还差 ${70 - weekly.pct}% 解锁周奖励</div>`;
+      }
+      html += '</div>';
+
+      html += '<div class="rewards-list">';
       pts.rewards.forEach(r => {
         const unlocked = totalPoints >= r.threshold;
         const pct = Math.min(100, Math.round(totalPoints / r.threshold * 100));
+        const tierLabel = r.threshold <= 100 ? '🥉' : r.threshold <= 350 ? '🥈' : r.threshold <= 750 ? '🥇' : '💎';
         html += `
           <div class="reward-item ${r.claimed ? 'claimed' : unlocked ? 'unlocked' : ''}">
             <div class="reward-info">
-              <div class="reward-label">${r.label}${r.claimed ? ' ✅' : ''}</div>
-              <div class="reward-threshold">需要 ${r.threshold} 分${r.claimed ? ' · 已兑换 🎉' : unlocked ? ' · 已解锁！快去兑换' : ''}</div>
+              <div class="reward-label">${tierLabel} ${r.label}${r.claimed ? ' ✅' : ''}</div>
+              <div class="reward-threshold">需要 ${r.threshold} 分${r.claimed ? ' · 已兑换 🎉' : unlocked ? ' · 已解锁！' : ''}</div>
             </div>
             <div class="reward-bar-track"><div class="reward-bar-fill" style="width:${pct}%"></div></div>
             ${unlocked && !r.claimed ? `<button class="claim-btn" onclick="APP.claim(${r.id})">兑换奖励</button>` : ''}
           </div>`;
       });
-
       html += '</div>';
+
       document.getElementById('main-content').innerHTML = html;
     } catch (e) {
       document.getElementById('main-content').innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--text-muted);font-size:1em;">加载失败，请检查网络</div>';
