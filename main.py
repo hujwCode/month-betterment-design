@@ -173,6 +173,13 @@ class ReorderItem(BaseModel):
 class ReorderRequest(BaseModel):
     habits: list[ReorderItem]
 
+class RewardReorderItem(BaseModel):
+    id: int
+    sort_order: int
+
+class RewardReorderRequest(BaseModel):
+    rewards: list[RewardReorderItem]
+
 
 # ── User / Habits ──
 
@@ -182,7 +189,9 @@ def api_login(req: LoginRequest, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(404, "User not found")
     habits = db.query(Habit).filter(Habit.user_id == req.user_id).order_by(Habit.sort_order).all()
-    rewards = db.query(Reward).filter(Reward.user_id == req.user_id).order_by(Reward.threshold).all()
+    rewards = db.query(Reward).filter(
+        Reward.user_id == req.user_id
+    ).order_by(Reward.sort_order, Reward.threshold).all()
     today = date.today().isoformat()
     today_records = db.query(Record).filter(
         Record.user_id == req.user_id, Record.date == today
@@ -194,7 +203,13 @@ def api_login(req: LoginRequest, db: Session = Depends(get_db)):
             for h in habits
         ],
         "rewards": [
-            {"id": r.id, "threshold": r.threshold, "label": r.label, "claimed": r.claimed}
+            {
+                "id": r.id,
+                "threshold": r.threshold,
+                "label": r.label,
+                "claimed": r.claimed,
+                "sort_order": r.sort_order,
+            }
             for r in rewards
         ],
         "today_records": {r.habit_key: True for r in today_records},
@@ -358,7 +373,9 @@ def _calc_weekly_stats(user_id: str, db: Session):
 @app.get("/api/points")
 def get_points(user_id: str, db: Session = Depends(get_db)):
     total_raw, redeemed, available = _calc_points(user_id, db)
-    rewards = db.query(Reward).filter(Reward.user_id == user_id).order_by(Reward.threshold).all()
+    rewards = db.query(Reward).filter(
+        Reward.user_id == user_id
+    ).order_by(Reward.sort_order, Reward.threshold).all()
     weekly = _calc_weekly_stats(user_id, db)
     today = datetime.now()
     return {
@@ -366,7 +383,13 @@ def get_points(user_id: str, db: Session = Depends(get_db)):
         "redeemed": redeemed,
         "available": available,
         "rewards": [
-            {"id": r.id, "threshold": r.threshold, "label": r.label, "claimed": r.claimed}
+            {
+                "id": r.id,
+                "threshold": r.threshold,
+                "label": r.label,
+                "claimed": r.claimed,
+                "sort_order": r.sort_order,
+            }
             for r in rewards
         ],
         "weekly": {
@@ -408,6 +431,57 @@ def claim_reward(req: ClaimRequest, db: Session = Depends(get_db)):
     if total_raw - redeemed < reward.threshold:
         raise HTTPException(400, "Not enough points")
     reward.claimed = True
+    db.commit()
+    return {"status": "ok"}
+
+
+@app.put("/api/rewards/reorder")
+def reorder_rewards(req: RewardReorderRequest, db: Session = Depends(get_db)):
+    if not req.rewards:
+        raise HTTPException(400, "Rewards cannot be empty")
+
+    ordered_items = sorted(req.rewards, key=lambda item: item.sort_order)
+    source_rewards = []
+    for item in ordered_items:
+        reward = db.query(Reward).filter(Reward.id == item.id).first()
+        if not reward:
+            raise HTTPException(404, "Reward not found")
+        source_rewards.append(reward)
+
+    if len({reward.user_id for reward in source_rewards}) > 1:
+        raise HTTPException(400, "Rewards must belong to the same user")
+
+    ordered_configs = [
+        {
+            "threshold": reward.threshold,
+            "label": reward.label,
+            "old_sort_order": reward.sort_order,
+            "sort_order": order,
+        }
+        for order, reward in enumerate(source_rewards)
+    ]
+
+    for order, reward in enumerate(source_rewards):
+        reward.sort_order = order
+
+    source_user_id = source_rewards[0].user_id if source_rewards else CONFIG_USER_ID
+    for uid in ALL_USERS:
+        if uid == source_user_id:
+            continue
+        claimed_by_order = {
+            reward.sort_order: reward.claimed
+            for reward in db.query(Reward).filter(Reward.user_id == uid).all()
+        }
+        db.query(Reward).filter(Reward.user_id == uid).delete()
+        for config in ordered_configs:
+            db.add(Reward(
+                user_id=uid,
+                threshold=config["threshold"],
+                label=config["label"],
+                claimed=claimed_by_order.get(config["old_sort_order"], False),
+                sort_order=config["sort_order"],
+            ))
+
     db.commit()
     return {"status": "ok"}
 
@@ -491,7 +565,13 @@ def get_admin_dashboard(db: Session = Depends(get_db)):
             "daily_records": record_dates,
             "habit_frequency": habit_freq,
             "rewards": [
-                {"id": r.id, "label": r.label, "threshold": r.threshold, "claimed": r.claimed}
+                {
+                    "id": r.id,
+                    "label": r.label,
+                    "threshold": r.threshold,
+                    "claimed": r.claimed,
+                    "sort_order": r.sort_order,
+                }
                 for r in user_rewards
             ],
         }

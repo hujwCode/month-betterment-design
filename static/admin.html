@@ -247,9 +247,10 @@ function logout() {
 async function loadDashboard() {
   const r = await fetch('/api/admin/dashboard');
   if (!r.ok) throw new Error('Failed to load dashboard');
+  const previousUserId = currentUserId;
   dashboardData = await r.json();
   if (!dashboardData || dashboardData.length === 0) throw new Error('No user data');
-  currentUserId = dashboardData[0].id;
+  currentUserId = dashboardData.some(u => u.id === previousUserId) ? previousUserId : dashboardData[0].id;
   renderUserTabs();
   renderCurrentUser();
   loadHabits();
@@ -459,7 +460,13 @@ function renderRewards(user) {
       <span style="font-size:0.82em;color:var(--text-muted);">已兑换 ${claimedCount}/${rewards.length}</span>
     </div>
     ${rewards.map((r, i) => `
-      <div class="habit-item-admin" style="cursor:default;">
+      <div class="habit-item-admin" draggable="true"
+           data-reward-id="${r.id}"
+           ondragstart="handleRewardDragStart(event, ${i})"
+           ondragover="handleRewardDragOver(event, ${i})"
+           ondragend="handleRewardDragEnd(event)"
+           ondrop="handleRewardDrop(event, ${i})">
+        <span class="drag-handle">⠿</span>
         <span class="habit-info">
           ${r.label}
           <span style="color:${r.claimed ? 'var(--accent-dark)' : 'var(--text-muted)'};font-size:0.82em;margin-left:4px;">
@@ -472,6 +479,53 @@ function renderRewards(user) {
       </div>
     `).join('')}
   `;
+}
+
+let rewardDragIndex = null;
+
+function handleRewardDragStart(e, idx) {
+  rewardDragIndex = idx;
+  e.target.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function handleRewardDragOver(e, idx) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+}
+
+function handleRewardDragEnd(e) {
+  e.target.classList.remove('dragging');
+  document.querySelectorAll('.habit-item-admin').forEach(el => el.classList.remove('drag-over'));
+}
+
+function handleRewardDrop(e, dropIdx) {
+  e.preventDefault();
+  const el = e.target.closest('.habit-item-admin');
+  if (el) el.classList.remove('drag-over');
+  if (rewardDragIndex === null || rewardDragIndex === dropIdx) return;
+
+  const user = dashboardData.find(u => u.id === currentUserId);
+  const rewards = user?.rewards || [];
+  const item = rewards.splice(rewardDragIndex, 1)[0];
+  rewards.splice(dropIdx, 0, item);
+  rewardDragIndex = null;
+  renderRewards(user);
+  saveRewardOrder(user);
+}
+
+async function saveRewardOrder(user) {
+  const ordered = (user?.rewards || []).map((r, i) => ({id: r.id, sort_order: i}));
+  const r = await fetch('/api/rewards/reorder', {
+    method: 'PUT', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({rewards: ordered})
+  });
+  if (!r.ok) {
+    alert('排序保存失败，请刷新后重试');
+    await loadDashboard();
+    return;
+  }
+  await loadDashboard();
 }
 
 function showRewardForm(idx) {
