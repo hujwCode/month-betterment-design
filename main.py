@@ -18,6 +18,8 @@ from database import init_db, get_db, SessionLocal
 from models import User, Habit, Record, Reward
 
 DEFAULT_USERS = [("me", "我", "🙋"), ("wife", "女王大人", "👑")]
+ALL_USERS = [uid for uid, _, _ in DEFAULT_USERS]
+CONFIG_USER_ID = DEFAULT_USERS[0][0]
 
 app = FastAPI(title="一个月变好")
 
@@ -28,6 +30,84 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _sync_shared_habit_config(db: Session):
+    """Keep habit labels, points and order shared across the two users."""
+    source_habits = db.query(Habit).filter(
+        Habit.user_id == CONFIG_USER_ID
+    ).order_by(Habit.sort_order).all()
+    source_keys = {h.key for h in source_habits}
+
+    for uid in ALL_USERS:
+        if uid == CONFIG_USER_ID:
+            continue
+        for source in source_habits:
+            target = db.query(Habit).filter(
+                Habit.user_id == uid, Habit.key == source.key
+            ).first()
+            if target:
+                target.label = source.label
+                target.points = source.points
+                target.sort_order = source.sort_order
+            else:
+                db.add(Habit(
+                    user_id=uid,
+                    key=source.key,
+                    label=source.label,
+                    points=source.points,
+                    sort_order=source.sort_order,
+                ))
+
+        extra_habits = db.query(Habit).filter(
+            Habit.user_id == uid,
+            Habit.key.notin_(source_keys),
+        ).all()
+        for habit in extra_habits:
+            db.query(Record).filter(
+                Record.user_id == uid,
+                Record.habit_key == habit.key,
+            ).delete()
+            db.delete(habit)
+
+
+def _sync_shared_reward_config(db: Session):
+    """Keep reward thresholds and labels shared while preserving per-user claims."""
+    source_rewards = db.query(Reward).filter(
+        Reward.user_id == CONFIG_USER_ID
+    ).order_by(Reward.sort_order, Reward.threshold).all()
+    source_orders = set()
+
+    for order, source in enumerate(source_rewards):
+        source.sort_order = order
+        source_orders.add(order)
+        for uid in ALL_USERS:
+            if uid == CONFIG_USER_ID:
+                continue
+            target = db.query(Reward).filter(
+                Reward.user_id == uid,
+                Reward.sort_order == order,
+            ).first()
+            if target:
+                target.threshold = source.threshold
+                target.label = source.label
+            else:
+                db.add(Reward(
+                    user_id=uid,
+                    threshold=source.threshold,
+                    label=source.label,
+                    sort_order=order,
+                ))
+
+    for uid in ALL_USERS:
+        if uid == CONFIG_USER_ID:
+            continue
+        extras = db.query(Reward).filter(
+            Reward.user_id == uid,
+            Reward.sort_order.notin_(source_orders),
+        ).all()
+        for reward in extras:
+            db.delete(reward)
 
 
 @app.on_event("startup")
@@ -68,6 +148,8 @@ def on_startup():
         for thresh, label, order in default_rewards:
             if not db.query(Reward).filter(Reward.user_id == uid, Reward.threshold == thresh).first():
                 db.add(Reward(user_id=uid, threshold=thresh, label=label, sort_order=order))
+    _sync_shared_habit_config(db)
+    _sync_shared_reward_config(db)
     db.commit()
     db.close()
 
@@ -134,8 +216,6 @@ def api_login(req: LoginRequest, db: Session = Depends(get_db)):
         "today_records": {r.habit_key: True for r in today_records},
     }
 
-
-ALL_USERS = ["me", "wife"]
 
 @app.get("/api/habits")
 def get_habits(user_id: str, db: Session = Depends(get_db)):
@@ -319,11 +399,14 @@ def get_points(user_id: str, db: Session = Depends(get_db)):
 
 @app.post("/api/rewards")
 def create_reward(req: RewardCreate, db: Session = Depends(get_db)):
-    count = db.query(Reward).filter(Reward.user_id == req.user_id).count()
-    db.add(Reward(
-        user_id=req.user_id, threshold=req.threshold,
-        label=req.label, sort_order=count,
-    ))
+    count = db.query(Reward).filter(Reward.user_id == CONFIG_USER_ID).count()
+    for uid in ALL_USERS:
+        db.add(Reward(
+            user_id=uid,
+            threshold=req.threshold,
+            label=req.label,
+            sort_order=count,
+        ))
     db.commit()
     return {"status": "ok"}
 
@@ -350,8 +433,11 @@ def update_reward(reward_id: int, req: RewardCreate, db: Session = Depends(get_d
     reward = db.query(Reward).filter(Reward.id == reward_id).first()
     if not reward:
         raise HTTPException(404, "Reward not found")
-    reward.threshold = req.threshold
-    reward.label = req.label
+    reward_order = reward.sort_order
+    rewards = db.query(Reward).filter(Reward.sort_order == reward_order).all()
+    for item in rewards:
+        item.threshold = req.threshold
+        item.label = req.label
     db.commit()
     return {"status": "ok"}
 
@@ -361,7 +447,11 @@ def delete_reward(reward_id: int, db: Session = Depends(get_db)):
     reward = db.query(Reward).filter(Reward.id == reward_id).first()
     if not reward:
         raise HTTPException(404, "Reward not found")
-    db.delete(reward)
+    rewards = db.query(Reward).filter(Reward.sort_order == reward.sort_order).all()
+    if any(r.claimed for r in rewards):
+        raise HTTPException(400, "Claimed rewards cannot be deleted")
+    for item in rewards:
+        db.delete(item)
     db.commit()
     return {"status": "ok"}
 
@@ -389,7 +479,10 @@ def get_admin_dashboard(db: Session = Depends(get_db)):
     for u in users:
         user_habits = [h for h in all_habits if h.user_id == u.id]
         user_records = [r for r in all_records if r.user_id == u.id]
-        user_rewards = sorted([r for r in all_rewards if r.user_id == u.id], key=lambda r: r.threshold)
+        user_rewards = sorted(
+            [r for r in all_rewards if r.user_id == u.id],
+            key=lambda r: (r.sort_order, r.threshold),
+        )
 
         total_raw = 0
         record_dates = {}

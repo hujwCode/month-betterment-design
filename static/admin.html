@@ -173,11 +173,11 @@ h2 { font-size:1.15em; margin-bottom:16px; color:var(--accent-dark); }
 
   <div class="grid">
     <div class="card">
-      <h2>📝 习惯管理 <button class="habit-add-btn" onclick="showHabitForm()">+ 新增</button></h2>
+      <h2>📝 习惯管理 · 共同参数 <button class="habit-add-btn" onclick="showHabitForm()">+ 新增</button></h2>
       <div id="habit-list"></div>
     </div>
     <div class="card">
-      <h2>🏆 积分 & 奖励 <button class="habit-add-btn" onclick="showRewardForm()">+ 新增</button></h2>
+      <h2>🏆 积分 & 奖励 · 共同参数 <button class="habit-add-btn" onclick="showRewardForm()">+ 新增</button></h2>
       <div id="rewards-summary"></div>
     </div>
   </div>
@@ -507,24 +507,30 @@ async function saveReward() {
   const threshold = parseInt(document.getElementById('rf-threshold').value) || 0;
   if (!label || !threshold) { alert('请填写完整'); return; }
 
-  if (editingRewardIdx !== null) {
-    const user = dashboardData.find(u => u.id === currentUserId);
-    const reward = user?.rewards?.[editingRewardIdx];
-    if (reward && reward.id) {
-      await fetch('/api/rewards/' + reward.id, {
-        method: 'PUT', headers: {'Content-Type': 'application/json'},
+  try {
+    if (editingRewardIdx !== null) {
+      const user = dashboardData.find(u => u.id === currentUserId);
+      const reward = user?.rewards?.[editingRewardIdx];
+      if (reward && reward.id) {
+        const r = await fetch('/api/rewards/' + reward.id, {
+          method: 'PUT', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({user_id: currentUserId, threshold, label})
+        });
+        if (!r.ok) throw new Error(await r.text());
+      }
+      editingRewardIdx = null;
+    } else {
+      const r = await fetch('/api/rewards', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({user_id: currentUserId, threshold, label})
       });
+      if (!r.ok) throw new Error(await r.text());
     }
-    editingRewardIdx = null;
-  } else {
-    await fetch('/api/rewards', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({user_id: currentUserId, threshold, label})
-    });
+    closeModal('reward-modal');
+    await loadDashboard();
+  } catch(e) {
+    alert('保存失败，请稍后重试');
   }
-  closeModal('reward-modal');
-  await loadDashboard();
 }
 
 async function deleteReward(idx) {
@@ -534,7 +540,11 @@ async function deleteReward(idx) {
   if (!reward || !reward.id) { alert('未找到该奖励'); return; }
   if (reward.claimed) { alert('已兑换的奖励不能删除'); return; }
   if (!confirm(`确定删除「${reward.label}」？`)) return;
-  await fetch(`/api/rewards/${reward.id}`, {method: 'DELETE'});
+  const r = await fetch(`/api/rewards/${reward.id}`, {method: 'DELETE'});
+  if (!r.ok) {
+    alert('已兑换的奖励不能删除');
+    return;
+  }
   await loadDashboard();
 }
 
