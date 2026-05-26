@@ -1,18 +1,23 @@
+import os
+import logging
+import calendar
+from typing import Optional
+from datetime import date, datetime, timedelta
+
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import Optional
-import logging
-from datetime import date, datetime, timedelta
-import calendar
+from sqlalchemy import func, and_
+from pydantic import BaseModel, Field
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 from database import init_db, get_db, SessionLocal
 from models import User, Habit, Record, Reward
+
+DEFAULT_USERS = [("me", "我", "🙋"), ("wife", "女王大人", "👑")]
 
 app = FastAPI(title="一个月变好")
 
@@ -29,7 +34,7 @@ app.add_middleware(
 def on_startup():
     init_db()
     db = SessionLocal()
-    for uid, name, emoji in [("me", "我", "🙋"), ("wife", "女王大人", "👑")]:
+    for uid, name, emoji in DEFAULT_USERS:
         user = db.query(User).filter(User.id == uid).first()
         if not user:
             db.add(User(id=uid, display_name=name, emoji=emoji))
@@ -45,7 +50,7 @@ def on_startup():
         ("baby", "👶 陪宝宝 30-60分钟", 15, 4),
         ("nophonemeal", "🍽️ 吃饭不玩手机", 5, 5),
     ]
-    for uid, _, _ in [("me", "我", "🙋"), ("wife", "女王大人", "👑")]:
+    for uid, _, _ in DEFAULT_USERS:
         for key, label, pts, order in default_habits:
             if not db.query(Habit).filter(Habit.user_id == uid, Habit.key == key).first():
                 db.add(Habit(user_id=uid, key=key, label=label, points=pts, sort_order=order))
@@ -59,7 +64,7 @@ def on_startup():
         (1000, "🏕️ 周末短途旅行", 6),
         (1500, "🎁 一个心愿礼物", 7),
     ]
-    for uid, _, _ in [("me", "我", "🙋"), ("wife", "女王大人", "👑")]:
+    for uid, _, _ in DEFAULT_USERS:
         for thresh, label, order in default_rewards:
             if not db.query(Reward).filter(Reward.user_id == uid, Reward.threshold == thresh).first():
                 db.add(Reward(user_id=uid, threshold=thresh, label=label, sort_order=order))
@@ -76,7 +81,7 @@ class HabitCreate(BaseModel):
     user_id: str
     key: str
     label: str
-    points: int
+    points: int = Field(default=10, gt=0, le=1000)
     sort_order: Optional[int] = 0
 
 class ToggleRequest(BaseModel):
@@ -215,16 +220,18 @@ def toggle_habit(req: ToggleRequest, db: Session = Depends(get_db)):
 
 @app.get("/api/records/month")
 def get_month_records(user_id: str, year: int, month: int, db: Session = Depends(get_db)):
-    month_str = f"{year}-{month:02d}"
+    start_date = f"{year}-{month:02d}-01"
+    end_date = f"{year}-{month:02d}-{calendar.monthrange(year, month)[1]}"
     records = db.query(Record).filter(
-        Record.user_id == user_id, Record.date.like(f"{month_str}%")
+        Record.user_id == user_id,
+        Record.date >= start_date,
+        Record.date <= end_date,
     ).all()
-    days_in_month = calendar.monthrange(year, month)[1]
     habits = {h.key: h.points for h in db.query(Habit).filter(Habit.user_id == user_id).all()}
 
     result = {}
-    for d in range(1, days_in_month + 1):
-        date_str = f"{month_str}-{d:02d}"
+    for d in range(1, calendar.monthrange(year, month)[1] + 1):
+        date_str = f"{year}-{month:02d}-{d:02d}"
         day_list = [(r.habit_key, True) for r in records if r.date == date_str]
         day_records = dict(day_list)
         day_points = sum(habits.get(k, 0) for k in day_records)
@@ -236,14 +243,38 @@ def get_month_records(user_id: str, year: int, month: int, db: Session = Depends
     return result
 
 
+@app.delete("/api/records")
+def clear_records(user_id: str, db: Session = Depends(get_db)):
+    """Clear all records for a single user (does not delete habits or rewards)."""
+    db.query(Record).filter(Record.user_id == user_id).delete()
+    db.commit()
+    return {"status": "ok"}
+
+
 @app.get("/api/week-stats")
 def get_week_stats(user_id: str, db: Session = Depends(get_db)):
+    return _calc_weekly_stats(user_id, db)
+
+
+# ── Points & Rewards ──
+
+def _calc_points(user_id: str, db: Session):
+    total_raw = db.query(
+        func.coalesce(func.sum(Habit.points), 0)
+    ).select_from(Record).join(
+        Habit,
+        and_(Record.habit_key == Habit.key, Record.user_id == Habit.user_id)
+    ).filter(Record.user_id == user_id).scalar()
+    rewards = db.query(Reward).filter(Reward.user_id == user_id).all()
+    redeemed = sum(r.threshold for r in rewards if r.claimed)
+    return total_raw, redeemed, total_raw - redeemed
+
+
+def _calc_weekly_stats(user_id: str, db: Session):
     today = datetime.now()
     weekday = today.weekday()
     week_start = datetime(today.year, today.month, today.day - weekday)
-    habit_keys = [
-        h.key for h in db.query(Habit).filter(Habit.user_id == user_id).all()
-    ]
+    habit_keys = [h.key for h in db.query(Habit).filter(Habit.user_id == user_id).all()]
     total_possible = len(habit_keys)
     week_done = 0
     for i in range(7):
@@ -260,40 +291,12 @@ def get_week_stats(user_id: str, db: Session = Depends(get_db)):
     }
 
 
-# ── Points & Rewards ──
-
-def _calc_points(user_id: str, db: Session):
-    records = db.query(Record).filter(Record.user_id == user_id).all()
-    habits = {
-        h.key: h.points
-        for h in db.query(Habit).filter(Habit.user_id == user_id).all()
-    }
-    total_raw = sum(habits.get(r.habit_key, 0) for r in records)
-    rewards = db.query(Reward).filter(Reward.user_id == user_id).all()
-    redeemed = sum(r.threshold for r in rewards if r.claimed)
-    return total_raw, redeemed, total_raw - redeemed
-
-
 @app.get("/api/points")
 def get_points(user_id: str, db: Session = Depends(get_db)):
     total_raw, redeemed, available = _calc_points(user_id, db)
     rewards = db.query(Reward).filter(Reward.user_id == user_id).order_by(Reward.threshold).all()
-    # Weekly stats for milestone bonus
+    weekly = _calc_weekly_stats(user_id, db)
     today = datetime.now()
-    weekday = today.weekday()
-    week_start = datetime(today.year, today.month, today.day - weekday)
-    habit_keys = [h.key for h in db.query(Habit).filter(Habit.user_id == user_id).all()]
-    total_possible = len(habit_keys)
-    week_done = 0
-    week_records = []
-    for i in range(7):
-        d = (week_start + timedelta(days=i)).strftime("%Y-%m-%d")
-        records = db.query(Record).filter(Record.user_id == user_id, Record.date == d).all()
-        week_done += len(records)
-        week_records.append(d)
-    week_pct = round(week_done / (total_possible * 7) * 100) if total_possible else 0
-    week_qualifies = week_pct >= 70
-    week_number = today.isocalendar()[1]
     return {
         "total_raw": total_raw,
         "redeemed": redeemed,
@@ -303,11 +306,11 @@ def get_points(user_id: str, db: Session = Depends(get_db)):
             for r in rewards
         ],
         "weekly": {
-            "week": week_number,
-            "done": week_done,
-            "total": total_possible * 7,
-            "pct": week_pct,
-            "qualifies": week_qualifies,
+            "week": today.isocalendar()[1],
+            "done": weekly["done"],
+            "total": weekly["total"],
+            "pct": weekly["pct"],
+            "qualifies": weekly["pct"] >= 70,
             "bonus_points": 30,
             "claimed_this_week": False,
         },
@@ -365,7 +368,7 @@ def delete_reward(reward_id: int, db: Session = Depends(get_db)):
 
 # ── Admin ──
 
-ADMIN_PASSWORD = "admin123"
+ADMIN_PASSWORD = os.environ.get("MB_ADMIN_PASSWORD", "admin123")
 
 
 @app.post("/api/admin/login")

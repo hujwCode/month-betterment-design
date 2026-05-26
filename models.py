@@ -7,7 +7,6 @@ class User(Base):
     id = Column(String, primary_key=True)
     display_name = Column(String, nullable=False)
     emoji = Column(String, default="🙋")
-    password = Column(String, default="admin123")
 
 
 class Habit(Base):
