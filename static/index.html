@@ -172,6 +172,7 @@ input, select { font-family: inherit; }
 }
 .total-points-label { display: block; font-size: 0.9em; opacity: 0.85; margin-bottom: 4px; }
 .total-points-value { display: block; font-size: 3em; font-weight: 700; letter-spacing: 2px; }
+.total-points-sub { display: block; font-size: 0.78em; opacity: 0.7; margin-top: 6px; font-weight: 400; }
 .rewards-list { display: flex; flex-direction: column; gap: 12px; }
 .reward-item {
   background: var(--bg-card); border-radius: var(--radius);
@@ -564,10 +565,17 @@ const APP = {
     try {
       const pts = await API.getPoints(d.user.id);
       const totalPoints = pts.total_raw;
+      const availablePoints = pts.available;
       const weekly = pts.weekly || {};
 
       let html = '<div class="section-title">🏆 积分 & 奖励</div>';
-      html += `<div class="total-points-card"><span class="total-points-label">累计积分</span><span class="total-points-value">${totalPoints}</span></div>`;
+
+      // Points card: show available prominently, total as secondary
+      html += `<div class="total-points-card">
+        <span class="total-points-label">可用积分</span>
+        <span class="total-points-value">${availablePoints}</span>
+        <span class="total-points-sub">累计获得 ${totalPoints} 分</span>
+      </div>`;
 
       // Weekly milestone card
       html += '<div class="weekly-card">';
@@ -582,22 +590,51 @@ const APP = {
       }
       html += '</div>';
 
-      html += '<div class="rewards-list">';
-      pts.rewards.forEach(r => {
-        const unlocked = totalPoints >= r.threshold;
-        const pct = Math.min(100, Math.round(totalPoints / r.threshold * 100));
-        const tierLabel = r.threshold <= 100 ? '🥉' : r.threshold <= 350 ? '🥈' : r.threshold <= 750 ? '🥇' : '💎';
-        html += `
-          <div class="reward-item ${r.claimed ? 'claimed' : unlocked ? 'unlocked' : ''}">
-            <div class="reward-info">
-              <div class="reward-label">${tierLabel} ${r.label}${r.claimed ? ' ✅' : ''}</div>
-              <div class="reward-threshold">需要 ${r.threshold} 分${r.claimed ? ' · 已兑换 🎉' : unlocked ? ' · 已解锁！' : ''}</div>
-            </div>
-            <div class="reward-bar-track"><div class="reward-bar-fill" style="width:${pct}%"></div></div>
-            ${unlocked && !r.claimed ? `<button class="claim-btn" onclick="APP.claim(${r.id})">兑换奖励</button>` : ''}
-          </div>`;
-      });
-      html += '</div>';
+      // Separate claimed and unclaimed
+      const unclaimed = pts.rewards.filter(r => !r.claimed);
+      const claimed = pts.rewards.filter(r => r.claimed);
+
+      // Unclaimed rewards section
+      if (unclaimed.length) {
+        html += '<div class="section-title" style="font-size:1.05em;margin-top:24px;">🎯 可兑换奖励</div>';
+        html += '<div class="rewards-list">';
+        unclaimed.forEach(r => {
+          const canAfford = availablePoints >= r.threshold;
+          const pct = Math.min(100, Math.round(totalPoints / r.threshold * 100));
+          const tierLabel = r.threshold <= 100 ? '🥉' : r.threshold <= 350 ? '🥈' : r.threshold <= 750 ? '🥇' : '💎';
+          html += `
+            <div class="reward-item ${canAfford ? 'unlocked' : ''}">
+              <div class="reward-info">
+                <div class="reward-label">${tierLabel} ${r.label}</div>
+                <div class="reward-threshold">需要 ${r.threshold} 分${canAfford ? ' · 可兑换！' : ''}</div>
+              </div>
+              <div class="reward-bar-track"><div class="reward-bar-fill" style="width:${pct}%"></div></div>
+              ${canAfford ? `<button class="claim-btn" onclick="APP.claim(${r.id})">兑换奖励</button>` : ''}
+            </div>`;
+        });
+        html += '</div>';
+      } else {
+        html += '<div style="text-align:center;padding:24px 0;color:var(--text-muted);font-size:0.9em;">🎉 暂无可兑换奖励</div>';
+      }
+
+      // Claimed rewards section
+      if (claimed.length) {
+        let totalRedeemed = 0;
+        claimed.forEach(r => { totalRedeemed += r.threshold; });
+        html += `<div class="section-title" style="font-size:1.05em;margin-top:24px;">🎁 已兑换奖品 <span style="font-size:0.75em;font-weight:400;color:var(--text-muted);">(${claimed.length} 项，共 ${totalRedeemed} 分)</span></div>`;
+        html += '<div class="rewards-list">';
+        claimed.forEach(r => {
+          const tierLabel = r.threshold <= 100 ? '🥉' : r.threshold <= 350 ? '🥈' : r.threshold <= 750 ? '🥇' : '💎';
+          html += `
+            <div class="reward-item claimed">
+              <div class="reward-info">
+                <div class="reward-label">${tierLabel} ${r.label} ✅</div>
+                <div class="reward-threshold">${r.threshold} 分</div>
+              </div>
+            </div>`;
+        });
+        html += '</div>';
+      }
 
       document.getElementById('main-content').innerHTML = html;
     } catch (e) {
