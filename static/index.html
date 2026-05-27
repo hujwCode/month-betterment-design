@@ -652,6 +652,7 @@ const APP = {
   },
 
   async claim(rewardId) {
+    if (!confirm('确定要兑换该奖励吗？')) return;
     try {
       await API.claimReward(this.data.user.id, rewardId);
       this.renderRewards();

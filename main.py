@@ -346,7 +346,9 @@ def _calc_points(user_id: str, db: Session):
     ).filter(Record.user_id == user_id).scalar()
     rewards = db.query(Reward).filter(Reward.user_id == user_id).all()
     redeemed = sum(r.threshold for r in rewards if r.claimed)
-    return total_raw, redeemed, total_raw - redeemed
+    weekly = _calc_weekly_stats(user_id, db)
+    bonus = 30 if weekly["pct"] >= 70 else 0
+    return total_raw, bonus, redeemed, total_raw + bonus - redeemed
 
 
 def _calc_weekly_stats(user_id: str, db: Session):
@@ -372,7 +374,7 @@ def _calc_weekly_stats(user_id: str, db: Session):
 
 @app.get("/api/points")
 def get_points(user_id: str, db: Session = Depends(get_db)):
-    total_raw, redeemed, available = _calc_points(user_id, db)
+    total_raw, bonus, redeemed, available = _calc_points(user_id, db)
     rewards = db.query(Reward).filter(
         Reward.user_id == user_id
     ).order_by(Reward.sort_order, Reward.threshold).all()
@@ -380,6 +382,7 @@ def get_points(user_id: str, db: Session = Depends(get_db)):
     today = datetime.now()
     return {
         "total_raw": total_raw,
+        "bonus": bonus,
         "redeemed": redeemed,
         "available": available,
         "rewards": [
@@ -398,8 +401,8 @@ def get_points(user_id: str, db: Session = Depends(get_db)):
             "total": weekly["total"],
             "pct": weekly["pct"],
             "qualifies": weekly["pct"] >= 70,
-            "bonus_points": 30,
-            "claimed_this_week": False,
+            "bonus_points": bonus,
+            "claimed_this_week": bonus > 0,
         },
     }
 
@@ -427,8 +430,8 @@ def claim_reward(req: ClaimRequest, db: Session = Depends(get_db)):
         raise HTTPException(404, "Reward not found")
     if reward.claimed:
         raise HTTPException(400, "Already claimed")
-    total_raw, redeemed, _ = _calc_points(req.user_id, db)
-    if total_raw - redeemed < reward.threshold:
+    total_raw, bonus, redeemed, available = _calc_points(req.user_id, db)
+    if available < reward.threshold:
         raise HTTPException(400, "Not enough points")
     reward.claimed = True
     db.commit()
@@ -493,6 +496,8 @@ def update_reward(reward_id: int, req: RewardCreate, db: Session = Depends(get_d
         raise HTTPException(404, "Reward not found")
     reward_order = reward.sort_order
     rewards = db.query(Reward).filter(Reward.sort_order == reward_order).all()
+    if any(r.claimed for r in rewards):
+        raise HTTPException(400, "Claimed rewards cannot be modified")
     for item in rewards:
         item.threshold = req.threshold
         item.label = req.label
@@ -542,12 +547,9 @@ def get_admin_dashboard(db: Session = Depends(get_db)):
             key=lambda r: (r.sort_order, r.threshold),
         )
 
-        total_raw = 0
+        total_raw, bonus, redeemed, available = _calc_points(u.id, db)
         record_dates = {}
         for r in user_records:
-            h = next((h for h in user_habits if h.key == r.habit_key), None)
-            if h:
-                total_raw += h.points
             if r.date not in record_dates:
                 record_dates[r.date] = []
             record_dates[r.date].append(r.habit_key)
@@ -562,8 +564,8 @@ def get_admin_dashboard(db: Session = Depends(get_db)):
             "display_name": u.display_name,
             "emoji": u.emoji,
             "total_raw_points": total_raw,
-            "redeemed_points": sum(r.threshold for r in user_rewards if r.claimed),
-            "available_points": total_raw - sum(r.threshold for r in user_rewards if r.claimed),
+            "redeemed_points": redeemed,
+            "available_points": available,
             "daily_records": record_dates,
             "habit_frequency": habit_freq,
             "rewards": [
