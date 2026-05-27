@@ -609,7 +609,7 @@ const APP = {
         html += '<div class="rewards-list">';
         unclaimed.forEach(r => {
           const canAfford = availablePoints >= r.threshold;
-          const pct = Math.min(100, Math.round(totalPoints / r.threshold * 100));
+          const pct = Math.min(100, Math.round(availablePoints / r.threshold * 100));
           const tierLabel = r.threshold <= 100 ? '🥉' : r.threshold <= 350 ? '🥈' : r.threshold <= 750 ? '🥇' : '💎';
           html += `
             <div class="reward-item ${canAfford ? 'unlocked' : ''}">
