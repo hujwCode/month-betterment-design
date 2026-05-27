@@ -259,6 +259,15 @@ input, select { font-family: inherit; }
 }
 .reward-setting:last-child { border-bottom: none; }
 .about-text { text-align: center; color: var(--text-muted); font-size: 0.85em; padding: 24px 0; }
+
+.version-card { background: var(--bg-card); border-radius: var(--radius); padding: 16px 20px; box-shadow: var(--shadow); margin-bottom: 12px; border-left: 3px solid var(--accent); }
+.version-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.version-tag { font-weight: 700; font-size: 0.95em; color: var(--accent-dark); }
+.version-date { font-size: 0.78em; color: var(--text-muted); }
+.version-title { font-size: 0.88em; color: var(--text); margin-bottom: 8px; font-weight: 500; }
+.version-changes { list-style: none; padding: 0; }
+.version-changes li { font-size: 0.82em; color: var(--text-muted); padding: 2px 0; padding-left: 14px; position: relative; line-height: 1.5; }
+.version-changes li::before { content: '•'; position: absolute; left: 0; color: var(--accent); }
 </style>
 </head>
 <body>
@@ -663,16 +672,44 @@ const APP = {
     html += `<button class="setting-btn" onclick="APP.switchUser()">🔄 切换用户</button>`;
     html += '</div>';
 
-
-
     // Data
     html += '<div class="settings-card">';
     html += `<button class="setting-btn danger" onclick="APP.resetData()">🔄 重置所有数据</button>`;
     html += '</div>';
 
+    // Version log entry
+    html += '<div class="settings-card" style="cursor:pointer;" onclick="APP.renderVersionLog()">';
+    html += '<div class="setting-row"><span>📋 更新日志</span><span style="color:var(--text-muted);font-size:0.85em;">查看版本记录 →</span></div>';
+    html += '</div>';
+
     html += '<div class="about-text">一个月变好计划 v2.0<br>后端版 · 数据云端同步 💪</div>';
 
     document.getElementById('main-content').innerHTML = html;
+  },
+
+  async renderVersionLog() {
+    document.getElementById('main-content').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">加载中...</div>';
+    try {
+      const r = await fetch('/versions.json');
+      const versions = await r.json();
+      let html = '<div class="section-title" style="display:flex;align-items:center;gap:12px;">';
+      html += '<span style="cursor:pointer;font-size:0.85em;color:var(--accent-dark);" onclick="APP.renderSettings()">← 设置</span>';
+      html += '<span style="font-size:1.05em;">📋 更新日志</span></div>';
+      versions.forEach(v => {
+        html += `<div class="version-card">
+          <div class="version-header">
+            <span class="version-tag">v${v.version}</span>
+            <span class="version-date">${v.date}</span>
+          </div>
+          <div class="version-title">${v.title}</div>
+          <ul class="version-changes">`;
+        v.changes.forEach(c => { html += `<li>${c}</li>`; });
+        html += '</ul></div>';
+      });
+      document.getElementById('main-content').innerHTML = html;
+    } catch (e) {
+      document.getElementById('main-content').innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--text-muted);font-size:1em;">加载失败</div>';
+    }
   },
 
   switchUser() {
