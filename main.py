@@ -562,6 +562,8 @@ def get_admin_dashboard(db: Session = Depends(get_db)):
             "display_name": u.display_name,
             "emoji": u.emoji,
             "total_raw_points": total_raw,
+            "redeemed_points": sum(r.threshold for r in user_rewards if r.claimed),
+            "available_points": total_raw - sum(r.threshold for r in user_rewards if r.claimed),
             "daily_records": record_dates,
             "habit_frequency": habit_freq,
             "rewards": [

@@ -72,7 +72,8 @@ h2 { font-size:1.15em; margin-bottom:16px; color:var(--accent-dark); }
 .date-habit-item .dh-label { flex:1; font-size:0.9em; }
 .date-habit-item .dh-points { font-size:0.8em; color:var(--text-muted); }
 
-.stat-cards { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:20px; }
+.stat-cards { display:grid; grid-template-columns:repeat(5,1fr); gap:16px; margin-bottom:20px; }
+@media (max-width:640px) { .stat-cards { grid-template-columns:repeat(2,1fr); } }
 .stat-card { background:var(--bg-card); border-radius:12px; padding:16px; text-align:center; box-shadow:var(--shadow); }
 .stat-card .num { font-size:1.8em; font-weight:700; color:var(--accent-dark); }
 .stat-card .lbl { font-size:0.82em; color:var(--text-muted); margin-top:4px; }
@@ -287,11 +288,12 @@ function renderStatCards(user) {
   const totalHabits = Object.keys(freq).length;
   const totalRecords = Object.values(user.daily_records || {}).reduce((sum, arr) => sum + arr.length, 0);
   const daysWithRecords = Object.keys(user.daily_records || {}).length;
+  const availablePoints = user.available_points ?? user.total_raw_points;
   document.getElementById('stat-cards').innerHTML = `
     <div class="stat-card"><div class="num">${user.total_raw_points}</div><div class="lbl">累计积分</div></div>
+    <div class="stat-card"><div class="num">${availablePoints}</div><div class="lbl">可用积分</div></div>
     <div class="stat-card"><div class="num">${totalHabits}</div><div class="lbl">习惯数</div></div>
     <div class="stat-card"><div class="num">${totalRecords}</div><div class="lbl">总打卡次数</div></div>
-    <div class="stat-card"><div class="num">${daysWithRecords}</div><div class="lbl">打卡天数</div></div>
   `;
 }
 
