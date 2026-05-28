@@ -180,7 +180,6 @@ input, select { font-family: inherit; }
   border: 2px solid var(--border); transition: all 0.3s;
 }
 .reward-item.unlocked { border-color: var(--accent); background: #F0F7EE; }
-.reward-item.claimed { opacity: 0.45; }
 .reward-label { font-size: 1.05em; margin-bottom: 2px; }
 .reward-threshold { font-size: 0.82em; color: var(--text-muted); }
 .reward-bar-track { height: 6px; background: var(--bg-secondary); border-radius: 99px; margin-top: 10px; overflow: hidden; }
@@ -361,6 +360,10 @@ const API = {
       body: JSON.stringify({user_id: userId, reward_id: rewardId})
     });
     if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'error'); }
+    return r.json();
+  },
+  async getRedemptionHistory(userId) {
+    const r = await fetch(`/api/rewards/history?user_id=${userId}`);
     return r.json();
   },
   async createReward(userId, threshold, label) {
@@ -599,26 +602,21 @@ const APP = {
       }
       html += '</div>';
 
-      // Separate claimed and unclaimed
-      const unclaimed = pts.rewards.filter(r => !r.claimed);
-      const claimed = pts.rewards.filter(r => r.claimed);
-
-      // Unclaimed rewards section
-      if (unclaimed.length) {
-        html += '<div class="section-title" style="font-size:1.05em;margin-top:24px;">🎯 可兑换奖励</div>';
+      // Show all rewards — each is repeatable, show redeem count
+      html += '<div class="section-title" style="font-size:1.05em;margin-top:24px;">🎯 兑换奖励</div>';
+      if (pts.rewards.length) {
         html += '<div class="rewards-list">';
-        unclaimed.forEach(r => {
+        pts.rewards.forEach(r => {
           const canAfford = availablePoints >= r.threshold;
-          const pct = Math.min(100, Math.round(availablePoints / r.threshold * 100));
           const tierLabel = r.threshold <= 100 ? '🥉' : r.threshold <= 350 ? '🥈' : r.threshold <= 750 ? '🥇' : '💎';
+          const redeemed = r.redeemed_count || 0;
           html += `
             <div class="reward-item ${canAfford ? 'unlocked' : ''}">
               <div class="reward-info">
                 <div class="reward-label">${tierLabel} ${r.label}</div>
-                <div class="reward-threshold">需要 ${r.threshold} 分${canAfford ? ' · 可兑换！' : ''}</div>
+                <div class="reward-threshold">${r.threshold} 分/次${redeemed > 0 ? ` · 已兑 ${redeemed} 次` : ''}</div>
               </div>
-              <div class="reward-bar-track"><div class="reward-bar-fill" style="width:${pct}%"></div></div>
-              ${canAfford ? `<button class="claim-btn" onclick="APP.claim(${r.id})">兑换奖励</button>` : ''}
+              ${canAfford ? `<button class="claim-btn" onclick="APP.claim(${r.id})">兑换</button>` : ''}
             </div>`;
         });
         html += '</div>';
@@ -626,24 +624,27 @@ const APP = {
         html += '<div style="text-align:center;padding:24px 0;color:var(--text-muted);font-size:0.9em;">🎉 暂无可兑换奖励</div>';
       }
 
-      // Claimed rewards section
-      if (claimed.length) {
-        let totalRedeemed = 0;
-        claimed.forEach(r => { totalRedeemed += r.threshold; });
-        html += `<div class="section-title" style="font-size:1.05em;margin-top:24px;">🎁 已兑换奖品 <span style="font-size:0.75em;font-weight:400;color:var(--text-muted);">(${claimed.length} 项，共 ${totalRedeemed} 分)</span></div>`;
-        html += '<div class="rewards-list">';
-        claimed.forEach(r => {
-          const tierLabel = r.threshold <= 100 ? '🥉' : r.threshold <= 350 ? '🥈' : r.threshold <= 750 ? '🥇' : '💎';
-          html += `
-            <div class="reward-item claimed">
-              <div class="reward-info">
-                <div class="reward-label">${tierLabel} ${r.label} ✅</div>
-                <div class="reward-threshold">${r.threshold} 分</div>
-              </div>
-            </div>`;
-        });
-        html += '</div>';
-      }
+      // Redemption history
+      try {
+        const history = await API.getRedemptionHistory(d.user.id);
+        if (history.length) {
+          html += '<div class="section-title" style="font-size:1.05em;margin-top:24px;">📜 兑换记录</div>';
+          html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+          history.forEach(h => {
+            const date = new Date(h.redeemed_at);
+            const dateStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
+            html += `
+              <div style="background:var(--bg-card);border-radius:var(--radius-sm);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border);">
+                <div>
+                  <span style="font-weight:500;">${h.reward_label}</span>
+                  <span style="font-size:0.78em;color:var(--text-muted);margin-left:8px;">${dateStr}</span>
+                </div>
+                <span style="color:var(--accent-dark);font-weight:600;font-size:0.9em;">-${h.threshold} 分</span>
+              </div>`;
+          });
+          html += '</div>';
+        }
+      } catch(e) { /* ignore history load errors */ }
 
       document.getElementById('main-content').innerHTML = html;
     } catch (e) {

@@ -1,5 +1,6 @@
-from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint
 from database import Base
+from datetime import datetime
 
 
 class User(Base):
@@ -35,5 +36,24 @@ class Reward(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     threshold = Column(Integer, nullable=False)
     label = Column(String, nullable=False)
-    claimed = Column(Boolean, default=False)
+    redeemed_count = Column(Integer, default=0)
     sort_order = Column(Integer, default=0)
+
+
+class RedemptionLog(Base):
+    __tablename__ = "redemption_logs"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    reward_id = Column(Integer, nullable=False)
+    reward_label = Column(String, nullable=False)
+    threshold = Column(Integer, nullable=False)
+    redeemed_at = Column(DateTime, default=datetime.now)
+
+
+class PointAdjustment(Base):
+    __tablename__ = "point_adjustments"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    amount = Column(Integer, nullable=False)
+    reason = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)

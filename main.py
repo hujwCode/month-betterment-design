@@ -8,14 +8,14 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, text
 from pydantic import BaseModel, Field
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 from database import init_db, get_db, SessionLocal
-from models import User, Habit, Record, Reward
+from models import User, Habit, Record, Reward, RedemptionLog, PointAdjustment
 
 DEFAULT_USERS = [("me", "我", "🙋"), ("wife", "女王大人", "👑")]
 ALL_USERS = [uid for uid, _, _ in DEFAULT_USERS]
@@ -89,7 +89,7 @@ def _sync_shared_reward_config(db: Session):
                 user_id=uid,
                 threshold=source.threshold,
                 label=source.label,
-                claimed=source.claimed,
+                redeemed_count=0,
                 sort_order=source.sort_order,
             ))
 
@@ -98,6 +98,21 @@ def _sync_shared_reward_config(db: Session):
 def on_startup():
     init_db()
     db = SessionLocal()
+
+    # Migrate: add redeemed_count column, migrate claimed → redeemed_count
+    from sqlalchemy import inspect
+    inspector = inspect(db.bind)
+    columns = {c["name"] for c in inspector.get_columns("rewards")}
+    if "claimed" in columns and "redeemed_count" not in columns:
+        db.execute(text("ALTER TABLE rewards ADD COLUMN redeemed_count INTEGER DEFAULT 0"))
+        db.execute(text("UPDATE rewards SET redeemed_count = 1 WHERE claimed = 1"))
+        db.commit()
+        logger.info("Migrated rewards: claimed → redeemed_count")
+
+    # Ensure new tables exist
+    from database import Base as DBBase
+    DBBase.metadata.create_all(bind=db.bind, tables=[RedemptionLog.__table__, PointAdjustment.__table__])
+
     for uid, name, emoji in DEFAULT_USERS:
         user = db.query(User).filter(User.id == uid).first()
         if not user:
@@ -163,6 +178,11 @@ class ClaimRequest(BaseModel):
     user_id: str
     reward_id: int
 
+class AdjustPointsRequest(BaseModel):
+    user_id: str
+    amount: int
+    reason: str
+
 class AdminLogin(BaseModel):
     password: str
 
@@ -207,7 +227,7 @@ def api_login(req: LoginRequest, db: Session = Depends(get_db)):
                 "id": r.id,
                 "threshold": r.threshold,
                 "label": r.label,
-                "claimed": r.claimed,
+                "redeemed_count": r.redeemed_count,
                 "sort_order": r.sort_order,
             }
             for r in rewards
@@ -345,10 +365,13 @@ def _calc_points(user_id: str, db: Session):
         and_(Record.habit_key == Habit.key, Record.user_id == Habit.user_id)
     ).filter(Record.user_id == user_id).scalar()
     rewards = db.query(Reward).filter(Reward.user_id == user_id).all()
-    redeemed = sum(r.threshold for r in rewards if r.claimed)
+    redeemed = sum(r.threshold * r.redeemed_count for r in rewards)
     weekly = _calc_weekly_stats(user_id, db)
     bonus = 30 if weekly["pct"] >= 70 else 0
-    return total_raw, bonus, redeemed, total_raw + bonus - redeemed
+    adjustments = db.query(
+        func.coalesce(func.sum(PointAdjustment.amount), 0)
+    ).filter(PointAdjustment.user_id == user_id).scalar()
+    return total_raw, bonus, redeemed, total_raw + bonus - redeemed + adjustments
 
 
 def _calc_weekly_stats(user_id: str, db: Session):
@@ -390,7 +413,7 @@ def get_points(user_id: str, db: Session = Depends(get_db)):
                 "id": r.id,
                 "threshold": r.threshold,
                 "label": r.label,
-                "claimed": r.claimed,
+                "redeemed_count": r.redeemed_count,
                 "sort_order": r.sort_order,
             }
             for r in rewards
@@ -428,14 +451,35 @@ def claim_reward(req: ClaimRequest, db: Session = Depends(get_db)):
     ).first()
     if not reward:
         raise HTTPException(404, "Reward not found")
-    if reward.claimed:
-        raise HTTPException(400, "Already claimed")
     total_raw, bonus, redeemed, available = _calc_points(req.user_id, db)
     if available < reward.threshold:
         raise HTTPException(400, "Not enough points")
-    reward.claimed = True
+    reward.redeemed_count += 1
+    db.add(RedemptionLog(
+        user_id=req.user_id,
+        reward_id=reward.id,
+        reward_label=reward.label,
+        threshold=reward.threshold,
+        redeemed_at=datetime.now(),
+    ))
     db.commit()
     return {"status": "ok"}
+
+
+@app.get("/api/rewards/history")
+def get_redemption_history(user_id: str, db: Session = Depends(get_db)):
+    logs = db.query(RedemptionLog).filter(
+        RedemptionLog.user_id == user_id
+    ).order_by(RedemptionLog.redeemed_at.desc()).limit(50).all()
+    return [
+        {
+            "id": log.id,
+            "reward_label": log.reward_label,
+            "threshold": log.threshold,
+            "redeemed_at": log.redeemed_at.isoformat(),
+        }
+        for log in logs
+    ]
 
 
 @app.put("/api/rewards/reorder")
@@ -471,8 +515,8 @@ def reorder_rewards(req: RewardReorderRequest, db: Session = Depends(get_db)):
     for uid in ALL_USERS:
         if uid == source_user_id:
             continue
-        claimed_by_order = {
-            reward.sort_order: reward.claimed
+        redeemed_by_order = {
+            reward.sort_order: reward.redeemed_count
             for reward in db.query(Reward).filter(Reward.user_id == uid).all()
         }
         db.query(Reward).filter(Reward.user_id == uid).delete()
@@ -481,7 +525,7 @@ def reorder_rewards(req: RewardReorderRequest, db: Session = Depends(get_db)):
                 user_id=uid,
                 threshold=config["threshold"],
                 label=config["label"],
-                claimed=claimed_by_order.get(config["old_sort_order"], False),
+                redeemed_count=redeemed_by_order.get(config["old_sort_order"], 0),
                 sort_order=config["sort_order"],
             ))
 
@@ -496,8 +540,8 @@ def update_reward(reward_id: int, req: RewardCreate, db: Session = Depends(get_d
         raise HTTPException(404, "Reward not found")
     reward_order = reward.sort_order
     rewards = db.query(Reward).filter(Reward.sort_order == reward_order).all()
-    if any(r.claimed for r in rewards):
-        raise HTTPException(400, "Claimed rewards cannot be modified")
+    if any(r.redeemed_count > 0 for r in rewards):
+        raise HTTPException(400, "Rewards that have been redeemed cannot be modified")
     for item in rewards:
         item.threshold = req.threshold
         item.label = req.label
@@ -511,8 +555,8 @@ def delete_reward(reward_id: int, db: Session = Depends(get_db)):
     if not reward:
         raise HTTPException(404, "Reward not found")
     rewards = db.query(Reward).filter(Reward.sort_order == reward.sort_order).all()
-    if any(r.claimed for r in rewards):
-        raise HTTPException(400, "Claimed rewards cannot be deleted")
+    if any(r.redeemed_count > 0 for r in rewards):
+        raise HTTPException(400, "Rewards that have been redeemed cannot be deleted")
     for item in rewards:
         db.delete(item)
     db.commit()
@@ -559,12 +603,22 @@ def get_admin_dashboard(db: Session = Depends(get_db)):
             count = len([r for r in user_records if r.habit_key == h.key])
             habit_freq[h.key] = {"label": h.label, "count": count, "points": h.points, "sort_order": h.sort_order}
 
+        logs = db.query(RedemptionLog).filter(
+            RedemptionLog.user_id == u.id
+        ).order_by(RedemptionLog.redeemed_at.desc()).limit(20).all()
+
+        adj_sum = db.query(
+            func.coalesce(func.sum(PointAdjustment.amount), 0)
+        ).filter(PointAdjustment.user_id == u.id).scalar()
+
         users_data[u.id] = {
             "id": u.id,
             "display_name": u.display_name,
             "emoji": u.emoji,
             "total_raw_points": total_raw,
+            "bonus_points": bonus,
             "redeemed_points": redeemed,
+            "points_adjustment": adj_sum,
             "available_points": available,
             "daily_records": record_dates,
             "habit_frequency": habit_freq,
@@ -573,14 +627,37 @@ def get_admin_dashboard(db: Session = Depends(get_db)):
                     "id": r.id,
                     "label": r.label,
                     "threshold": r.threshold,
-                    "claimed": r.claimed,
+                    "redeemed_count": r.redeemed_count,
                     "sort_order": r.sort_order,
                 }
                 for r in user_rewards
             ],
+            "redemption_logs": [
+                {
+                    "reward_label": log.reward_label,
+                    "threshold": log.threshold,
+                    "redeemed_at": log.redeemed_at.isoformat(),
+                }
+                for log in logs
+            ],
         }
 
     return list(users_data.values())
+
+
+@app.post("/api/admin/adjust-points")
+def admin_adjust_points(req: AdjustPointsRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == req.user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    db.add(PointAdjustment(
+        user_id=req.user_id,
+        amount=req.amount,
+        reason=req.reason,
+    ))
+    db.commit()
+    logger.info(f"Adjusted points for {req.user_id}: {req.amount:+d} ({req.reason})")
+    return {"status": "ok"}
 
 
 # ── Static files ──

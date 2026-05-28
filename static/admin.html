@@ -289,11 +289,13 @@ function renderStatCards(user) {
   const totalRecords = Object.values(user.daily_records || {}).reduce((sum, arr) => sum + arr.length, 0);
   const daysWithRecords = Object.keys(user.daily_records || {}).length;
   const availablePoints = user.available_points ?? user.total_raw_points;
+  const adj = user.points_adjustment || 0;
   document.getElementById('stat-cards').innerHTML = `
-    <div class="stat-card"><div class="num">${user.total_raw_points}</div><div class="lbl">累计积分</div></div>
+    <div class="stat-card"><div class="num">${user.total_raw_points}</div><div class="lbl">打卡积分</div></div>
     <div class="stat-card"><div class="num">${availablePoints}</div><div class="lbl">可用积分</div></div>
     <div class="stat-card"><div class="num">${totalHabits}</div><div class="lbl">习惯数</div></div>
     <div class="stat-card"><div class="num">${totalRecords}</div><div class="lbl">总打卡次数</div></div>
+    <div class="stat-card"><div class="num">${adj > 0 ? '+' : ''}${adj}</div><div class="lbl">手动调整</div></div>
   `;
 }
 
@@ -452,14 +454,19 @@ function renderHabitChart(user) {
 function renderRewards(user) {
   const container = document.getElementById('rewards-summary');
   const rewards = user.rewards || [];
-  const claimedCount = rewards.filter(r => r.claimed).length;
+  const totalRedeems = rewards.reduce((s, r) => s + (r.redeemed_count || 0), 0);
+  const adj = user.points_adjustment || 0;
   container.innerHTML = `
     <div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
       <div>
-        <span style="font-size:1.5em;font-weight:700;color:var(--accent-dark);">${user.total_raw_points}</span>
-        <span class="stats-label"> 分</span>
+        <span style="font-size:1.5em;font-weight:700;color:var(--accent-dark);">${user.available_points}</span>
+        <span class="stats-label"> 可用分</span>
+        ${adj ? `<span style="font-size:0.82em;color:var(--text-muted);margin-left:8px;">(调整 ${adj > 0 ? '+' : ''}${adj})</span>` : ''}
       </div>
-      <span style="font-size:0.82em;color:var(--text-muted);">已兑换 ${claimedCount}/${rewards.length}</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="habit-edit-btn2" onclick="showAdjustForm()" style="font-size:0.85em;">✏️ 调整积分</button>
+        <span style="font-size:0.82em;color:var(--text-muted);">共 ${totalRedeems} 次兑换</span>
+      </div>
     </div>
     ${rewards.map((r, i) => `
       <div class="habit-item-admin" draggable="true"
@@ -471,9 +478,7 @@ function renderRewards(user) {
         <span class="drag-handle">⠿</span>
         <span class="habit-info">
           ${r.label}
-          <span style="color:${r.claimed ? 'var(--accent-dark)' : 'var(--text-muted)'};font-size:0.82em;margin-left:4px;">
-            ${r.claimed ? '✅' : ''}
-          </span>
+          ${r.redeemed_count > 0 ? `<span style="color:var(--accent-dark);font-size:0.82em;margin-left:4px;">已兑${r.redeemed_count}次</span>` : ''}
         </span>
         <span class="habit-pts">${r.threshold} 分</span>
         <button class="habit-edit-btn2" onclick="showRewardForm(${i})">编辑</button>
@@ -481,6 +486,32 @@ function renderRewards(user) {
       </div>
     `).join('')}
   `;
+
+  // Redemption history
+  const logs = user.redemption_logs || [];
+  if (logs.length) {
+    let logHtml = '<div style="margin-top:16px;"><div style="font-size:0.9em;font-weight:600;margin-bottom:8px;">📜 兑换记录</div>';
+    logs.forEach(log => {
+      const d = new Date(log.redeemed_at);
+      const dateStr = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      logHtml += `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.85em;">
+          <span>${log.reward_label} <span style="color:var(--text-muted);font-size:0.85em;">${dateStr}</span></span>
+          <span style="color:var(--accent-dark);font-weight:600;">-${log.threshold} 分</span>
+        </div>`;
+    });
+    logHtml += '</div>';
+    container.innerHTML += logHtml;
+
+    // Stats summary
+    const totalSpent = logs.reduce((s, l) => s + l.threshold, 0);
+    const statsHtml = `
+      <div style="display:flex;gap:12px;margin-top:12px;font-size:0.85em;">
+        <span style="background:var(--bg-secondary);padding:4px 12px;border-radius:6px;">共 ${logs.length} 次兑换</span>
+        <span style="background:var(--bg-secondary);padding:4px 12px;border-radius:6px;">合计 ${totalSpent} 分</span>
+      </div>`;
+    container.innerHTML += statsHtml;
+  }
 }
 
 let rewardDragIndex = null;
@@ -528,6 +559,67 @@ async function saveRewardOrder(user) {
     return;
   }
   await loadDashboard();
+}
+
+function showAdjustForm() {
+  const user = dashboardData.find(u => u.id === currentUserId);
+  const currentPts = user?.available_points ?? 0;
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'adjust-modal';
+  modal.innerHTML = `
+    <div class="modal-card">
+      <div class="modal-title">✏️ 调整 ${user?.display_name || currentUserId} 的积分</div>
+      <div id="adj-preview" style="background:var(--bg-secondary);border-radius:8px;padding:14px;margin-bottom:16px;text-align:center;">
+        <div style="display:flex;justify-content:space-around;align-items:center;gap:8px;">
+          <div><div style="font-size:0.78em;color:var(--text-muted);">当前</div><div style="font-size:1.4em;font-weight:700;" id="adj-current">${currentPts}</div></div>
+          <div style="font-size:1.4em;color:var(--text-muted);">→</div>
+          <div><div style="font-size:0.78em;color:var(--text-muted);">调整</div><div style="font-size:1.4em;font-weight:700;" id="adj-delta">+0</div></div>
+          <div style="font-size:1.4em;color:var(--text-muted);">→</div>
+          <div><div style="font-size:0.78em;color:var(--text-muted);">调整后</div><div style="font-size:1.8em;font-weight:700;color:var(--accent-dark);" id="adj-result">${currentPts}</div></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>调整值（正数增加，负数减少）</label>
+        <input id="adj-amount" type="number" value="0" placeholder="如: 50 或 -30" oninput="updateAdjPreview()" />
+      </div>
+      <div class="form-group">
+        <label>原因</label>
+        <input id="adj-reason" placeholder="如: 补发打卡积分 / 手动扣除" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal('adjust-modal')">取消</button>
+        <button class="btn-primary" onclick="saveAdjustment()">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  document.getElementById('adj-amount').focus();
+}
+
+function updateAdjPreview() {
+  const current = parseInt(document.getElementById('adj-current').textContent);
+  const delta = parseInt(document.getElementById('adj-amount').value) || 0;
+  document.getElementById('adj-delta').textContent = delta > 0 ? `+${delta}` : `${delta}`;
+  document.getElementById('adj-delta').style.color = delta >= 0 ? 'var(--accent-dark)' : '#B84A4A';
+  document.getElementById('adj-result').textContent = current + delta;
+}
+
+async function saveAdjustment() {
+  const amount = parseInt(document.getElementById('adj-amount').value) || 0;
+  const reason = document.getElementById('adj-reason').value.trim();
+  if (!amount) { alert('请输入调整值'); return; }
+  if (!reason) { alert('请填写原因'); return; }
+  try {
+    const r = await fetch('/api/admin/adjust-points', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: currentUserId, amount, reason})
+    });
+    if (!r.ok) throw new Error(await r.text());
+    closeModal('adjust-modal');
+    await loadDashboard();
+  } catch(e) {
+    alert('保存失败: ' + e.message);
+  }
 }
 
 function showRewardForm(idx) {
@@ -594,11 +686,11 @@ async function deleteReward(idx) {
   const rewards = user?.rewards || [];
   const reward = rewards[idx];
   if (!reward || !reward.id) { alert('未找到该奖励'); return; }
-  if (reward.claimed) { alert('已兑换的奖励不能删除'); return; }
+  if (reward.redeemed_count > 0) { alert('已兑换过的奖励不能删除'); return; }
   if (!confirm(`确定删除「${reward.label}」？`)) return;
   const r = await fetch(`/api/rewards/${reward.id}`, {method: 'DELETE'});
   if (!r.ok) {
-    alert('已兑换的奖励不能删除');
+    alert('已兑换过的奖励不能删除');
     return;
   }
   await loadDashboard();
@@ -612,10 +704,12 @@ function closeModal(id) {
 function renderDailyDetail(user) {
   const tbody = document.getElementById('detail-body');
   const records = user.daily_records || {};
+  const freq = user.habit_frequency || {};
   const dates = Object.keys(records).sort().reverse().slice(0, 30);
   tbody.innerHTML = dates.map(date => {
     const items = records[date] || [];
-    return `<tr><td>${date}</td><td>${items.join(', ') || '-'}</td><td>${items.length}</td></tr>`;
+    const labels = items.map(k => freq[k]?.label || k);
+    return `<tr><td>${date}</td><td>${labels.join('、') || '-'}</td><td>${items.length}</td></tr>`;
   }).join('');
 }
 
