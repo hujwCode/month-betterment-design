@@ -351,7 +351,16 @@ input, select { font-family: inherit; }
 .version-changes { list-style: none; padding: 0; }
 .version-changes li { font-size: 0.82em; color: var(--text-muted); padding: 2px 0; padding-left: 14px; position: relative; line-height: 1.5; }
 .version-changes li::before { content: '•'; position: absolute; left: 0; color: var(--accent); }
-</style>
+
+/* ── Desktop adaptation ── */
+@media (min-width: 768px) {
+  body { background: #E8DDD4; display: flex; justify-content: center; align-items: flex-start; min-height: 100dvh; }
+  #app { width: 480px; margin: 0; box-shadow: 0 0 40px rgba(0,0,0,0.1); position: relative; background: var(--bg); }
+  #bottom-nav { width: 480px; left: 50%; right: auto; transform: translateX(-50%); }
+  .user-btn:hover { transform: translateY(-4px); }
+  .habit-item:hover { border-color: var(--accent); }
+  .claim-btn:hover { opacity: 0.85; }
+}
 </head>
 <body>
 
