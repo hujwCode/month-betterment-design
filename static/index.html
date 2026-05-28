@@ -99,7 +99,11 @@ input, select { font-family: inherit; }
   background: none; border: none; font-size: 0.72em; color: var(--text-muted);
   cursor: pointer; padding: 4px 0; transition: color 0.2s; -webkit-tap-highlight-color: transparent;
 }
-.tab-btn.active { color: var(--accent-dark); font-weight: 600; }
+.tab-btn.active { color: var(--accent-dark); font-weight: 600; position: relative; }
+.tab-btn.active::after {
+  content: ''; position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%);
+  width: 20px; height: 3px; border-radius: 2px; background: var(--accent-dark);
+}
 .tab-btn span { font-size: 0.85em; }
 
 .section-title { font-size: 1.3em; font-weight: 600; margin-bottom: 16px; margin-top: 4px; }
