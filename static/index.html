@@ -38,11 +38,13 @@ input, select { font-family: inherit; }
   position: relative;
 }
 .tab-page {
-  position: absolute; top: 20px; left: 20px; right: 20px; bottom: 100px;
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  padding: 20px 20px 100px;
   opacity: 0; transform: translateY(12px); pointer-events: none;
   transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1),
               transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .tab-page.active {
   opacity: 1; transform: translateY(0); pointer-events: auto;
@@ -114,7 +116,7 @@ input, select { font-family: inherit; }
 }
 .header-left { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1.05em; }
 .header-points { font-weight: 600; color: var(--accent-dark); }
-#main-content { flex: 1; padding: 20px 20px 100px; overflow-y: auto; }
+#main-content { flex: 1; position: relative; }
 
 #bottom-nav {
   position: fixed; bottom: 0; left: 0; right: 0;
