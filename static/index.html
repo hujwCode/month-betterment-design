@@ -674,10 +674,16 @@ const APP = {
     }
 
     let html = '<div class="section-title">📊 进度总览</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">';
+    const monthNames = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
 
     // Calendar on top
-    const monthNames = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
-    html += `<div class="section-subtitle">${monthNames[month-1]} ${year}</div>`;
+    html += `<div class="section-subtitle" style="margin-bottom:0;">${monthNames[month-1]} ${year}</div>`;
+    html += '<div style="display:flex;gap:10px;font-size:0.75em;color:var(--text-muted);">';
+    html += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--accent);vertical-align:middle;margin-right:3px;"></span>全部</span>';
+    html += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--bg-secondary);vertical-align:middle;margin-right:3px;"></span>部分</span>';
+    html += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid var(--border);vertical-align:middle;margin-right:3px;"></span>未做</span>';
+    html += '</div></div>';
     html += '<div class="calendar-grid">';
     ['日','一','二','三','四','五','六'].forEach(d => { html += `<div class="cal-weekday">${d}</div>`; });
     for (let i = 0; i < firstDay; i++) { html += '<div class="cal-day empty"></div>'; }
