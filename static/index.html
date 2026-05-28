@@ -197,6 +197,57 @@ input, select { font-family: inherit; }
 .weekly-badge { margin-top:10px; padding:8px 14px; background:var(--accent); color:white; border-radius:8px; font-size:0.9em; font-weight:600; text-align:center; }
 .weekly-tip { margin-top:6px; font-size:0.82em; color:var(--text-muted); }
 
+/* ── Broadcast ticker ── */
+.broadcast-ticker {
+  background: linear-gradient(135deg, #8B9D83, #A8C9A5);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  cursor: pointer;
+  user-select: none;
+}
+.broadcast-ticker .ticker-icon {
+  background: rgba(255,255,255,0.25);
+  border-radius: 6px;
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.broadcast-ticker .ticker-icon span { color: white; font-size: 0.85em; }
+.broadcast-ticker .ticker-stage {
+  flex: 1; min-width: 0; height: 24px;
+  overflow: hidden; position: relative;
+}
+.broadcast-ticker .ticker-item {
+  position: absolute; left: 0; right: 0;
+  display: flex; align-items: center; gap: 6px;
+  height: 24px; transition: transform 0.3s ease, opacity 0.3s ease;
+}
+.broadcast-ticker .ticker-text {
+  font-size: 0.85em; color: white;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.broadcast-ticker .ticker-time {
+  font-size: 0.72em; color: rgba(255,255,255,0.6);
+  white-space: nowrap; flex-shrink: 0;
+}
+.broadcast-ticker .ticker-dots {
+  display: flex; gap: 3px; flex-shrink: 0; align-items: center;
+}
+.broadcast-ticker .ticker-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: rgba(255,255,255,0.3);
+  transition: background 0.3s;
+}
+.broadcast-ticker .ticker-dot.active { background: white; }
+.broadcast-ticker .ticker-more {
+  color: rgba(255,255,255,0.7);
+  font-size: 0.78em; flex-shrink: 0;
+}
+
 .settings-card { background: var(--bg-card); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); margin-bottom: 16px; }
 .setting-title { font-weight: 600; margin-bottom: 12px; }
 .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
@@ -394,6 +445,9 @@ const API = {
 const APP = {
   data: null,
   currentTab: 'checkin',
+  broadcasts: [],
+  broadcastTimer: null,
+  broadcastIdx: 0,
 
   async selectUser(userId) {
     try {
@@ -435,6 +489,7 @@ const APP = {
   },
 
   switchTab(tab) {
+    if (tab !== 'checkin') this.stopBroadcastTicker();
     this.currentTab = tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     const btn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
@@ -452,11 +507,22 @@ const APP = {
   },
 
   /* ── Check-in ── */
-  renderCheckin() {
+  async renderCheckin() {
     const d = this.data;
     const records = d.today_records || {};
     const habits = d.habits;
-    let html = '<div class="section-title">📋 今日打卡</div><div class="checkin-list">';
+
+    // Load broadcasts for ticker
+    let tickerHtml = '';
+    try {
+      const allBroadcasts = await API.getBroadcasts();
+      this.broadcasts = allBroadcasts;
+      tickerHtml = this.renderBroadcastTicker(allBroadcasts);
+    } catch (e) { /* broadcasts are optional */ }
+
+    let html = '<div class="section-title">📋 今日打卡</div>';
+    html += tickerHtml;
+    html += '<div class="checkin-list">';
 
     habits.forEach(h => {
       const done = records[h.key];
@@ -486,6 +552,8 @@ const APP = {
       d._pointsCache = pts.available;
       document.getElementById('checkin-total').textContent = pts.available;
     });
+
+    this.startBroadcastTicker();
   },
 
   async toggle(key) {
@@ -731,7 +799,57 @@ const APP = {
     await API.clearRecords(this.data.user.id);
     this.data = await API.login(this.data.user.id);
     this.renderSettings();
-  }
+  },
+
+  renderBroadcastTicker(broadcasts) {
+    if (!broadcasts || !broadcasts.length) return '';
+    const idx = this.broadcastIdx % broadcasts.length;
+    const b = broadcasts[idx];
+    const timeAgo = this.timeAgo(b.created_at);
+    const userLabel = b.user_emoji + ' ' + b.user_display_name;
+    const icon = b.type === 'manual' ? '💬' : '🔔';
+
+    let dotsHtml = '';
+    const maxDots = Math.min(broadcasts.length, 8);
+    for (let i = 0; i < maxDots; i++) {
+      dotsHtml += `<div class="ticker-dot ${i === (idx % maxDots) ? 'active' : ''}"></div>`;
+    }
+
+    return `<div class="broadcast-ticker" onclick="APP.switchTab('broadcast')">
+      <div class="ticker-icon"><span>📢</span></div>
+      <div class="ticker-stage">
+        <div class="ticker-item" style="top:0;">
+          <span class="ticker-text">${userLabel} ${b.content}</span>
+          <span class="ticker-time">${icon} ${timeAgo}</span>
+        </div>
+      </div>
+      <div class="ticker-dots">${dotsHtml}</div>
+      <span class="ticker-more">更多 ›</span>
+    </div>`;
+  },
+
+  timeAgo(isoStr) {
+    const diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
+    if (diff < 60) return '刚刚';
+    if (diff < 3600) return Math.floor(diff/60) + '分钟前';
+    if (diff < 86400) return Math.floor(diff/3600) + '小时前';
+    return Math.floor(diff/86400) + '天前';
+  },
+
+  startBroadcastTicker() {
+    this.stopBroadcastTicker();
+    this.broadcastTimer = setInterval(() => {
+      this.broadcastIdx++;
+      this.renderCheckin();
+    }, 2000);
+  },
+
+  stopBroadcastTicker() {
+    if (this.broadcastTimer) {
+      clearInterval(this.broadcastTimer);
+      this.broadcastTimer = null;
+    }
+  },
 };
 
 /* ── Welcome page content ── */
