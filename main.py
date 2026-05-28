@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 from database import init_db, get_db, SessionLocal
-from models import User, Habit, Record, Reward, RedemptionLog, PointAdjustment
+from models import User, Habit, Record, Reward, RedemptionLog, PointAdjustment, Broadcast
 
 DEFAULT_USERS = [("me", "我", "🙋"), ("wife", "女王大人", "👑")]
 ALL_USERS = [uid for uid, _, _ in DEFAULT_USERS]
@@ -111,7 +111,11 @@ def on_startup():
 
     # Ensure new tables exist
     from database import Base as DBBase
-    DBBase.metadata.create_all(bind=db.bind, tables=[RedemptionLog.__table__, PointAdjustment.__table__])
+    DBBase.metadata.create_all(bind=db.bind, tables=[
+        RedemptionLog.__table__,
+        PointAdjustment.__table__,
+        Broadcast.__table__,
+    ])
 
     for uid, name, emoji in DEFAULT_USERS:
         user = db.query(User).filter(User.id == uid).first()
@@ -182,6 +186,10 @@ class AdjustPointsRequest(BaseModel):
     user_id: str
     amount: int
     reason: str
+
+class BroadcastRequest(BaseModel):
+    user_id: str
+    content: str = Field(..., max_length=200)
 
 class AdminLogin(BaseModel):
     password: str
@@ -308,6 +316,15 @@ def toggle_habit(req: ToggleRequest, db: Session = Depends(get_db)):
         else:
             db.add(Record(user_id=req.user_id, habit_key=req.habit_key, date=today))
             msg = "created"
+            habit = db.query(Habit).filter(
+                Habit.user_id == req.user_id, Habit.key == req.habit_key
+            ).first()
+            if habit:
+                db.add(Broadcast(
+                    user_id=req.user_id,
+                    type="auto",
+                    content=f"完成了 {habit.label}",
+                ))
         db.commit()
         logger.info(f"Toggle {req.user_id}/{req.habit_key}: {msg}")
         return {"status": "ok"}
@@ -403,6 +420,20 @@ def get_points(user_id: str, db: Session = Depends(get_db)):
     ).order_by(Reward.sort_order, Reward.threshold).all()
     weekly = _calc_weekly_stats(user_id, db)
     today = datetime.now()
+    if bonus > 0:
+        week_start = (datetime.now() - timedelta(days=datetime.now().weekday())).strftime("%Y-%m-%d")
+        existing = db.query(Broadcast).filter(
+            Broadcast.type == "auto",
+            Broadcast.content.like("本周达标%"),
+            Broadcast.created_at >= week_start,
+        ).first()
+        if not existing:
+            db.add(Broadcast(
+                user_id=user_id,
+                type="auto",
+                content="本周达标 🎉 +30 分",
+            ))
+            db.commit()
     return {
         "total_raw": total_raw,
         "bonus": bonus,
@@ -455,6 +486,11 @@ def claim_reward(req: ClaimRequest, db: Session = Depends(get_db)):
     if available < reward.threshold:
         raise HTTPException(400, "Not enough points")
     reward.redeemed_count += 1
+    db.add(Broadcast(
+        user_id=req.user_id,
+        type="auto",
+        content=f"兑换了 {reward.label}",
+    ))
     db.add(RedemptionLog(
         user_id=req.user_id,
         reward_id=reward.id,
@@ -657,6 +693,43 @@ def admin_adjust_points(req: AdjustPointsRequest, db: Session = Depends(get_db))
     ))
     db.commit()
     logger.info(f"Adjusted points for {req.user_id}: {req.amount:+d} ({req.reason})")
+    return {"status": "ok"}
+
+
+# ── Broadcasts (shared feed) ──
+
+
+@app.get("/api/broadcasts")
+def get_broadcasts(limit: int = 50, db: Session = Depends(get_db)):
+    broadcasts = db.query(Broadcast).order_by(
+        Broadcast.created_at.desc()
+    ).limit(limit).all()
+    user_cache = {u.id: u for u in db.query(User).all()}
+    return [
+        {
+            "id": b.id,
+            "user_id": b.user_id,
+            "user_display_name": user_cache[b.user_id].display_name,
+            "user_emoji": user_cache[b.user_id].emoji,
+            "type": b.type,
+            "content": b.content,
+            "created_at": b.created_at.isoformat(),
+        }
+        for b in broadcasts
+    ]
+
+
+@app.post("/api/broadcasts")
+def create_broadcast(req: BroadcastRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == req.user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    db.add(Broadcast(
+        user_id=req.user_id,
+        type="manual",
+        content=req.content,
+    ))
+    db.commit()
     return {"status": "ok"}
 
 
