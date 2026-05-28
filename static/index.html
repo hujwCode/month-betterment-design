@@ -32,11 +32,11 @@ input, select { font-family: inherit; }
   }
 }
 
-/* ── Tab transition ── */
-#main-content { animation: fadeSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
-@keyframes fadeSlideUp {
-  from { opacity:0; transform:translateY(16px); }
-  to   { opacity:1; transform:translateY(0); }
+/* ── Content fade-in ── */
+#main-content { animation: contentFadeIn 0.2s ease-out; }
+@keyframes contentFadeIn {
+  from { opacity:0.7; }
+  to   { opacity:1; }
 }
 
 /* ── Skeleton loading ── */
@@ -506,12 +506,12 @@ const APP = {
     this.renderTab(tab);
   },
 
-  renderTab(tab) {
+  async renderTab(tab) {
     switch (tab) {
-      case 'checkin': this.renderCheckin(); break;
-      case 'progress': this.renderProgress(); break;
-      case 'rewards': this.renderRewards(); break;
-      case 'settings': this.renderSettings(); break;
+      case 'checkin': return this.renderCheckin();
+      case 'progress': return this.renderProgress();
+      case 'rewards': return this.renderRewards();
+      case 'settings': return this.renderSettings();
     }
   },
 
