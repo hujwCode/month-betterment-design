@@ -224,7 +224,7 @@ input, select { font-family: inherit; }
 .broadcast-ticker .ticker-item {
   position: absolute; left: 0; right: 0;
   display: flex; align-items: center; gap: 6px;
-  height: 24px; transition: transform 0.3s ease, opacity 0.3s ease;
+  height: 24px; transition: transform 0.35s ease, opacity 0.35s ease;
 }
 .broadcast-ticker .ticker-text {
   font-size: 0.85em; color: white;
@@ -808,22 +808,28 @@ const APP = {
 
   renderBroadcastTicker(broadcasts) {
     if (!broadcasts || !broadcasts.length) return '';
-    const idx = this.broadcastIdx % broadcasts.length;
-    const b = broadcasts[idx];
-    const icon = b.type === 'manual' ? '💬' : '🔔';
+    const len = broadcasts.length;
+    const cur = broadcasts[this.broadcastIdx % len];
+    const next = broadcasts[(this.broadcastIdx + 1) % len];
+    const curIcon = cur.type === 'manual' ? '💬' : '🔔';
+    const nextIcon = next.type === 'manual' ? '💬' : '🔔';
 
     let dotsHtml = '';
-    const maxDots = Math.min(broadcasts.length, 8);
+    const maxDots = Math.min(len, 8);
     for (let i = 0; i < maxDots; i++) {
-      dotsHtml += `<div class="ticker-dot ${i === (idx % maxDots) ? 'active' : ''}"></div>`;
+      dotsHtml += `<div class="ticker-dot ${i === (this.broadcastIdx % maxDots) ? 'active' : ''}"></div>`;
     }
 
     return `<div class="broadcast-ticker" onclick="APP.switchTab('broadcast')">
       <div class="ticker-icon"><span>📢</span></div>
-      <div class="ticker-stage">
-        <div class="ticker-item" style="top:0;">
-          <span class="ticker-text">${b.user_emoji} ${b.user_display_name} ${b.content}</span>
-          <span class="ticker-time">${icon} ${this.timeAgo(b.created_at)}</span>
+      <div class="ticker-stage" id="ticker-stage">
+        <div class="ticker-item" style="transform:translateY(0);opacity:1;">
+          <span class="ticker-text">${cur.user_emoji} ${cur.user_display_name} ${cur.content}</span>
+          <span class="ticker-time">${curIcon} ${this.timeAgo(cur.created_at)}</span>
+        </div>
+        <div class="ticker-item" style="transform:translateY(24px);opacity:0;pointer-events:none;">
+          <span class="ticker-text">${next.user_emoji} ${next.user_display_name} ${next.content}</span>
+          <span class="ticker-time">${nextIcon} ${this.timeAgo(next.created_at)}</span>
         </div>
       </div>
       <div class="ticker-dots">${dotsHtml}</div>
@@ -832,25 +838,24 @@ const APP = {
   },
 
   updateTickerView() {
-    // Lightweight DOM-only ticker update — no API calls, no full re-render
+    // Animate: slide current up and out, slide next into view
     if (!this.broadcasts.length) return;
-    this.broadcastIdx++;
-    const idx = this.broadcastIdx % this.broadcasts.length;
-    const b = this.broadcasts[idx];
-    const icon = b.type === 'manual' ? '💬' : '🔔';
+    const stage = document.getElementById('ticker-stage');
+    if (!stage) return;
+    const items = stage.querySelectorAll('.ticker-item');
+    if (items.length < 2) return;
 
-    const textEl = document.querySelector('.ticker-text');
-    const timeEl = document.querySelector('.ticker-time');
-    const dots = document.querySelectorAll('.ticker-dot');
-    if (!textEl) return;
+    // Trigger slide animation
+    items[0].style.transform = 'translateY(-24px)';
+    items[0].style.opacity = '0';
+    items[1].style.transform = 'translateY(0)';
+    items[1].style.opacity = '1';
 
-    textEl.textContent = `${b.user_emoji} ${b.user_display_name} ${b.content}`;
-    timeEl.textContent = `${icon} ${this.timeAgo(b.created_at)}`;
-
-    const maxDots = Math.min(this.broadcasts.length, 8);
-    dots.forEach((d, i) => {
-      d.classList.toggle('active', i === (idx % maxDots));
-    });
+    // After animation completes, re-render with new index
+    setTimeout(() => {
+      this.broadcastIdx++;
+      this.renderCheckin();
+    }, 380);
   },
 
   timeAgo(isoStr) {
@@ -865,9 +870,9 @@ const APP = {
     this.stopBroadcastTicker();
     const tick = () => {
       this.updateTickerView();
-      this.broadcastTimer = setTimeout(tick, 2000);
+      this.broadcastTimer = setTimeout(tick, 3500);
     };
-    this.broadcastTimer = setTimeout(tick, 2000);
+    this.broadcastTimer = setTimeout(tick, 3500);
   },
 
   stopBroadcastTicker() {
