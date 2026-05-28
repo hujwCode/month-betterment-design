@@ -354,10 +354,9 @@ input, select { font-family: inherit; }
 
 /* ── Desktop adaptation ── */
 @media (min-width: 768px) {
-  body { background: #E8DDD4; display: flex; justify-content: center; align-items: flex-start; min-height: 100dvh; }
-  #app { width: 480px; margin: 0; box-shadow: 0 0 40px rgba(0,0,0,0.1); position: relative; background: var(--bg); }
-  #bottom-nav { width: 480px; left: 50%; right: auto; transform: translateX(-50%); }
-  .user-btn:hover { transform: translateY(-4px); }
+  body { background: #E8DDD4; }
+  #app { max-width: 480px; margin: 0 auto; box-shadow: 0 0 40px rgba(0,0,0,0.08); }
+  #bottom-nav { max-width: 480px; left: 50%; right: auto; transform: translateX(-50%); }
   .habit-item:hover { border-color: var(--accent); }
   .claim-btn:hover { opacity: 0.85; }
 }
