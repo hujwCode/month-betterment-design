@@ -424,6 +424,7 @@ def get_points(user_id: str, db: Session = Depends(get_db)):
         week_start = (datetime.now() - timedelta(days=datetime.now().weekday())).strftime("%Y-%m-%d")
         existing = db.query(Broadcast).filter(
             Broadcast.type == "auto",
+            Broadcast.user_id == user_id,
             Broadcast.content.like("本周达标%"),
             Broadcast.created_at >= week_start,
         ).first()
