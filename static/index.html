@@ -805,8 +805,6 @@ const APP = {
     if (!broadcasts || !broadcasts.length) return '';
     const idx = this.broadcastIdx % broadcasts.length;
     const b = broadcasts[idx];
-    const timeAgo = this.timeAgo(b.created_at);
-    const userLabel = b.user_emoji + ' ' + b.user_display_name;
     const icon = b.type === 'manual' ? '💬' : '🔔';
 
     let dotsHtml = '';
@@ -819,13 +817,35 @@ const APP = {
       <div class="ticker-icon"><span>📢</span></div>
       <div class="ticker-stage">
         <div class="ticker-item" style="top:0;">
-          <span class="ticker-text">${userLabel} ${b.content}</span>
-          <span class="ticker-time">${icon} ${timeAgo}</span>
+          <span class="ticker-text">${b.user_emoji} ${b.user_display_name} ${b.content}</span>
+          <span class="ticker-time">${icon} ${this.timeAgo(b.created_at)}</span>
         </div>
       </div>
       <div class="ticker-dots">${dotsHtml}</div>
       <span class="ticker-more">更多 ›</span>
     </div>`;
+  },
+
+  updateTickerView() {
+    // Lightweight DOM-only ticker update — no API calls, no full re-render
+    if (!this.broadcasts.length) return;
+    this.broadcastIdx++;
+    const idx = this.broadcastIdx % this.broadcasts.length;
+    const b = this.broadcasts[idx];
+    const icon = b.type === 'manual' ? '💬' : '🔔';
+
+    const textEl = document.querySelector('.ticker-text');
+    const timeEl = document.querySelector('.ticker-time');
+    const dots = document.querySelectorAll('.ticker-dot');
+    if (!textEl) return;
+
+    textEl.textContent = `${b.user_emoji} ${b.user_display_name} ${b.content}`;
+    timeEl.textContent = `${icon} ${this.timeAgo(b.created_at)}`;
+
+    const maxDots = Math.min(this.broadcasts.length, 8);
+    dots.forEach((d, i) => {
+      d.classList.toggle('active', i === (idx % maxDots));
+    });
   },
 
   timeAgo(isoStr) {
@@ -838,15 +858,16 @@ const APP = {
 
   startBroadcastTicker() {
     this.stopBroadcastTicker();
-    this.broadcastTimer = setInterval(() => {
-      this.broadcastIdx++;
-      this.renderCheckin();
-    }, 2000);
+    const tick = () => {
+      this.updateTickerView();
+      this.broadcastTimer = setTimeout(tick, 2000);
+    };
+    this.broadcastTimer = setTimeout(tick, 2000);
   },
 
   stopBroadcastTicker() {
     if (this.broadcastTimer) {
-      clearInterval(this.broadcastTimer);
+      clearTimeout(this.broadcastTimer);
       this.broadcastTimer = null;
     }
   },
