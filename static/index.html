@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="一个月变好">
-<title>一个月变好</title>
+<meta name="apple-mobile-web-app-title" content="✨ 小进步">
+<title>✨ 小进步</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -351,15 +351,7 @@ input, select { font-family: inherit; }
 .version-changes { list-style: none; padding: 0; }
 .version-changes li { font-size: 0.82em; color: var(--text-muted); padding: 2px 0; padding-left: 14px; position: relative; line-height: 1.5; }
 .version-changes li::before { content: '•'; position: absolute; left: 0; color: var(--accent); }
-
-/* ── Desktop adaptation ── */
-@media (min-width: 768px) {
-  body { background: #E8DDD4; }
-  #app { max-width: 480px; margin: 0 auto; box-shadow: 0 0 40px rgba(0,0,0,0.08); }
-  #bottom-nav { max-width: 480px; left: 50%; right: auto; transform: translateX(-50%); }
-  .habit-item:hover { border-color: var(--accent); }
-  .claim-btn:hover { opacity: 0.85; }
-}
+</style>
 </head>
 <body>
 
@@ -368,7 +360,7 @@ input, select { font-family: inherit; }
   <div class="user-select-container">
     <div class="user-select-top">
       <div class="user-select-date" id="welcome-date"></div>
-      <div class="app-title">一个月变好</div>
+      <div class="app-title">✨ 小进步</div>
       <div class="user-select-motto" id="daily-motto"></div>
     </div>
     <p class="app-subtitle">选一个人开始打卡</p>
@@ -846,7 +838,7 @@ const APP = {
     html += '<div class="section-title" style="font-size:1.05em;margin-top:24px;">📋 更新日志</div>';
     html += '<div id="version-log"><div style="text-align:center;padding:20px;color:var(--text-muted);font-size:0.85em;">加载中...</div></div>';
 
-    html += '<div class="about-text">一个月变好计划 v2.0<br>后端版 · 数据云端同步 💪</div>';
+    html += '<div class="about-text">✨ 小进步 v2.0<br>和 TA 一起，每天小进步一点点。</div>';
 
     document.getElementById('tab-settings').innerHTML = html;
 

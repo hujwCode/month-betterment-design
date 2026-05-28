@@ -21,7 +21,7 @@ DEFAULT_USERS = [("me", "我", "🙋"), ("wife", "女王大人", "👑")]
 ALL_USERS = [uid for uid, _, _ in DEFAULT_USERS]
 CONFIG_USER_ID = DEFAULT_USERS[0][0]
 
-app = FastAPI(title="一个月变好")
+app = FastAPI(title="✨ 小进步")
 
 app.add_middleware(
     CORSMiddleware,
