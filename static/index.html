@@ -839,6 +839,7 @@ const APP = {
     try {
       const r = await fetch('/versions.json');
       const versions = await r.json();
+      versions.sort((a, b) => b.date.localeCompare(a.date) || b.version.localeCompare(a.version));
       let vhtml = '';
       versions.forEach(v => {
         vhtml += `<div class="version-card">
