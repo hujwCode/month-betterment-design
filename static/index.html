@@ -551,9 +551,11 @@ const APP = {
       return;
     }
 
-    // First visit: render content
-    if (!next.dataset.rendered) {
-      next.innerHTML = '<div class="skeleton skel-bar"></div><div class="skeleton skel-card"></div>';
+    // Always re-render broadcast tab for fresh data; cache other tabs
+    if (tab === 'broadcast' || !next.dataset.rendered) {
+      if (tab !== 'broadcast') {
+        next.innerHTML = '<div class="skeleton skel-bar"></div><div class="skeleton skel-card"></div>';
+      }
       this.renderTabContent(tab);
       next.dataset.rendered = 'true';
     }
