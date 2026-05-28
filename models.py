@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint, Index
 from database import Base
 from datetime import datetime
 
@@ -57,3 +57,16 @@ class PointAdjustment(Base):
     amount = Column(Integer, nullable=False)
     reason = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
+
+
+class Broadcast(Base):
+    __tablename__ = "broadcasts"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    type = Column(String, nullable=False)  # "auto" or "manual"
+    content = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("idx_broadcasts_user_created", "user_id", "created_at"),
+    )
