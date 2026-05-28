@@ -357,6 +357,7 @@ input, select { font-family: inherit; }
     <button class="tab-btn active" data-tab="checkin" onclick="APP.switchTab('checkin')">📋<span>打卡</span></button>
     <button class="tab-btn" data-tab="progress" onclick="APP.switchTab('progress')">📊<span>进度</span></button>
     <button class="tab-btn" data-tab="rewards" onclick="APP.switchTab('rewards')">🏆<span>奖励</span></button>
+    <button class="tab-btn" data-tab="broadcast" onclick="APP.switchTab('broadcast')">📢<span>动态</span></button>
     <button class="tab-btn" data-tab="settings" onclick="APP.switchTab('settings')">⚙️<span>设置</span></button>
   </nav>
 </div>
@@ -494,6 +495,10 @@ const APP = {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     const btn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
     if (btn) btn.classList.add('active');
+    if (tab === 'broadcast') {
+      this.renderBroadcastTab();
+      return;
+    }
     this.renderTab(tab);
   },
 
@@ -869,6 +874,63 @@ const APP = {
     if (this.broadcastTimer) {
       clearTimeout(this.broadcastTimer);
       this.broadcastTimer = null;
+    }
+  },
+
+  async renderBroadcastTab() {
+    const d = this.data;
+    document.getElementById('main-content').innerHTML = '<div class="section-title">📢 小喇叭</div><div class="skeleton skel-bar" style="width:60%;"></div><div class="skeleton skel-card"></div><div class="skeleton skel-card"></div>';
+    try {
+      const broadcasts = await API.getBroadcasts();
+      let html = '<div class="section-title">📢 小喇叭</div>';
+
+      // Manual shout input
+      html += `<div style="background:var(--bg-card);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:16px;display:flex;gap:8px;align-items:center;border:1px solid var(--border);">
+      <span>${d.user.emoji}</span>
+      <input id="broadcast-input" placeholder="说句话..." style="flex:1;border:none;outline:none;font-size:0.9em;background:transparent;color:var(--text);" maxlength="200" onkeydown="if(event.key==='Enter')APP.sendBroadcast()" />
+      <button class="claim-btn" onclick="APP.sendBroadcast()" style="padding:6px 16px;font-size:0.85em;">发送</button>
+    </div>`;
+
+      // Broadcast list
+      if (broadcasts.length) {
+        html += '<div style="display:flex;flex-direction:column;gap:10px;">';
+        broadcasts.forEach(b => {
+          const timeAgo = this.timeAgo(b.created_at);
+          const icon = b.type === 'manual' ? '💬' : '🔔';
+          html += `
+          <div style="background:var(--bg-card);border-radius:var(--radius-sm);padding:14px 16px;border:1px solid var(--border);display:flex;gap:10px;align-items:flex-start;">
+            <div style="width:32px;height:32px;border-radius:50%;background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${b.user_emoji}</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:0.88em;color:var(--text);">
+                <strong>${b.user_display_name}</strong> ${b.content}
+              </div>
+              <div style="font-size:0.75em;color:var(--text-muted);margin-top:3px;">${icon} ${timeAgo}</div>
+            </div>
+          </div>`;
+        });
+        html += '</div>';
+      } else {
+        html += '<div style="text-align:center;padding:40px 0;color:var(--text-muted);font-size:0.9em;">暂无动态，开始打卡吧 💪</div>';
+      }
+
+      document.getElementById('main-content').innerHTML = html;
+    } catch(e) {
+      document.getElementById('main-content').innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--text-muted);">加载失败</div>';
+    }
+  },
+
+  async sendBroadcast() {
+    const input = document.getElementById('broadcast-input');
+    if (!input || !input.value.trim()) return;
+    try {
+      await API.sendBroadcast(this.data.user.id, input.value.trim());
+      input.value = '';
+      this.renderBroadcastTab();
+      // Refresh ticker data
+      const allBroadcasts = await API.getBroadcasts();
+      this.broadcasts = allBroadcasts;
+    } catch(e) {
+      alert(e.message);
     }
   },
 };
