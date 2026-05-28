@@ -362,6 +362,18 @@ const API = {
     if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'error'); }
     return r.json();
   },
+  async getBroadcasts() {
+    const r = await fetch('/api/broadcasts');
+    return r.json();
+  },
+  async sendBroadcast(userId, content) {
+    const r = await fetch('/api/broadcasts', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: userId, content})
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'error'); }
+    return r.json();
+  },
   async getRedemptionHistory(userId) {
     const r = await fetch(`/api/rewards/history?user_id=${userId}`);
     return r.json();
