@@ -228,7 +228,7 @@ class RewardReorderRequest(BaseModel):
 # ── Admin auth / Access code ──
 
 ADMIN_PASSWORD = os.environ.get("MB_ADMIN_PASSWORD", "admin123")
-ACCESS_CODE = os.environ.get("MB_ACCESS_CODE", "love2024")
+ACCESS_CODE = os.environ.get("MB_ACCESS_CODE", "xiaojinbu2025")
 
 
 def _admin_token():
