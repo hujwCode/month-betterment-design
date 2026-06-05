@@ -1,10 +1,10 @@
 #!/bin/bash
-# 一个月变好计划 v2.0 - 服务器部署脚本
+# DailyStep - 服务器部署脚本
 # 在 Ubuntu 服务器上以 root 或 ubuntu 用户运行
 
 set -e
 
-echo "🌿 开始部署 一个月变好计划 v2.0"
+echo "🌿 开始部署 DailyStep"
 
 # 1. 安装依赖
 echo "📦 安装 Python 依赖..."
@@ -14,12 +14,12 @@ sudo apt-get install -y -qq python3-pip python3-venv
 # 2. 拉取代码
 echo "📥 拉取最新代码..."
 cd /var/www
-if [ -d month-betterment-server ]; then
-  sudo rm -rf month-betterment-server
+if [ -d dailystep-server ]; then
+  sudo rm -rf dailystep-server
 fi
-sudo git clone https://github.com/hujwCode/month-betterment-design.git month-betterment-server
-sudo chown -R ubuntu:ubuntu month-betterment-server
-cd month-betterment-server
+sudo git clone https://github.com/hujwCode/dailystep-server.git dailystep-server
+sudo chown -R ubuntu:ubuntu dailystep-server
+cd dailystep-server
 
 # 3. 创建虚拟环境并安装
 echo "🐍 配置 Python 环境..."
@@ -29,15 +29,15 @@ pip install -q -r requirements.txt
 
 # 4. 创建 systemd 服务
 echo "⚙️ 创建 systemd 服务..."
-sudo tee /etc/systemd/system/month-betterment.service > /dev/null << 'SERVICE'
+sudo tee /etc/systemd/system/dailystep.service > /dev/null << 'SERVICE'
 [Unit]
-Description=Month Betterment FastAPI
+Description=DailyStep FastAPI
 After=network.target
 
 [Service]
 User=ubuntu
-WorkingDirectory=/var/www/month-betterment-server
-ExecStart=/var/www/month-betterment-server/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+WorkingDirectory=/var/www/dailystep-server
+ExecStart=/var/www/dailystep-server/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5
 
@@ -47,7 +47,7 @@ SERVICE
 
 # 5. 更新 nginx 配置
 echo "🌐 更新 Nginx 配置..."
-sudo tee /etc/nginx/sites-available/month-betterment > /dev/null << 'NGINX'
+sudo tee /etc/nginx/sites-available/dailystep > /dev/null << 'NGINX'
 server {
     listen 80;
     server_name 43.153.155.195;
@@ -62,15 +62,15 @@ server {
 }
 NGINX
 
-sudo ln -sf /etc/nginx/sites-available/month-betterment /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/dailystep /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl restart nginx
 
 # 6. 启动后端服务
 echo "🚀 启动后端服务..."
 sudo systemctl daemon-reload
-sudo systemctl enable month-betterment
-sudo systemctl restart month-betterment
+sudo systemctl enable dailystep
+sudo systemctl restart dailystep
 
 # 7. 开放防火墙
 echo "🔥 配置防火墙..."
@@ -85,5 +85,5 @@ echo "📊 管理后台: http://43.153.155.195/admin.html"
 echo "🔐 后台密码: admin123"
 echo "========================"
 echo ""
-echo "查看运行状态: sudo systemctl status month-betterment"
-echo "查看实时日志: sudo journalctl -u month-betterment -f"
+echo "查看运行状态: sudo systemctl status dailystep"
+echo "查看实时日志: sudo journalctl -u dailystep -f"

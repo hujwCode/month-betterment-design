@@ -202,6 +202,41 @@ let habitChartInstance = null;
 let selectedDate = null;
 let editingRewardIdx = null;
 
+function escapeHTML(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
+function escapeAttr(value) {
+  return escapeHTML(value);
+}
+
+function jsArg(value) {
+  return JSON.stringify(String(value ?? ''));
+}
+
+function localDateString(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function adminToken() {
+  return localStorage.getItem('mb_admin_token') || '';
+}
+
+function adminFetch(url, options = {}) {
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      'X-Admin-Token': adminToken()
+    }
+  });
+}
+
 async function adminLogin() {
   const pw = document.getElementById('admin-password').value;
   try {
@@ -210,7 +245,9 @@ async function adminLogin() {
       body:JSON.stringify({password:pw})
     });
     if (!r.ok) throw new Error('密码错误');
+    const data = await r.json();
     localStorage.setItem('mb_admin', '1');
+    localStorage.setItem('mb_admin_token', data.token || '');
     showDashboard();
     await loadDashboard();
   } catch(e) {
@@ -225,6 +262,7 @@ function showDashboard() {
 
 function logout() {
   localStorage.removeItem('mb_admin');
+  localStorage.removeItem('mb_admin_token');
   document.getElementById('dashboard').style.display = 'none';
   document.getElementById('login-screen').style.display = 'block';
   document.getElementById('admin-password').value = '';
@@ -234,7 +272,7 @@ function logout() {
 
 /* Auto-login on page load if cached */
 (async function() {
-  if (localStorage.getItem('mb_admin')) {
+  if (localStorage.getItem('mb_admin') && localStorage.getItem('mb_admin_token')) {
     showDashboard();
     try {
       await loadDashboard();
@@ -246,7 +284,7 @@ function logout() {
 })();
 
 async function loadDashboard() {
-  const r = await fetch('/api/admin/dashboard');
+  const r = await adminFetch('/api/admin/dashboard');
   if (!r.ok) throw new Error('Failed to load dashboard');
   const previousUserId = currentUserId;
   dashboardData = await r.json();
@@ -260,7 +298,7 @@ async function loadDashboard() {
 function renderUserTabs() {
   const container = document.getElementById('user-tabs');
   container.innerHTML = dashboardData.map(u =>
-    `<button class="user-tab ${u.id === currentUserId ? 'active' : ''}" onclick="switchUser('${u.id}')">${u.emoji} ${u.display_name}</button>`
+    `<button class="user-tab ${u.id === currentUserId ? 'active' : ''}" onclick="switchUser(${jsArg(u.id)})">${escapeHTML(u.emoji)} ${escapeHTML(u.display_name)}</button>`
   ).join('');
 }
 
@@ -307,7 +345,7 @@ function renderHeatmap(user) {
   const month = today.getMonth() + 1;
   const daysInMonth = new Date(year, month, 0).getDate();
   const firstDay = new Date(year, month - 1, 1).getDay();
-  const todayStr = today.toISOString().slice(0,10);
+  const todayStr = localDateString(today);
   const hCount = Object.keys(user.habit_frequency || {}).length;
 
   let html = '<div class="heatmap-grid">';
@@ -361,7 +399,7 @@ function showDateDetail(dateStr) {
       return `
         <div class="date-habit-item">
           <div class="dh-check ${done ? 'done' : 'undone'}">${done ? '✓' : '·'}</div>
-          <span class="dh-label">${info.label}</span>
+          <span class="dh-label">${escapeHTML(info.label)}</span>
           <span class="dh-points">${done ? '+' + info.points : '—'}</span>
         </div>`;
     }).join('')}
@@ -388,7 +426,7 @@ function renderWeeklyChart(user) {
     for (let i = 0; i < 7; i++) {
       const d = new Date(weekStart);
       d.setDate(weekStart.getDate() + i);
-      const dateStr = d.toISOString().slice(0,10);
+      const dateStr = localDateString(d);
       const dayData = records[dateStr] || [];
       done += dayData.length;
       total += hCount;
@@ -477,7 +515,7 @@ function renderRewards(user) {
            ondrop="handleRewardDrop(event, ${i})">
         <span class="drag-handle">⠿</span>
         <span class="habit-info">
-          ${r.label}
+          ${escapeHTML(r.label)}
           ${r.redeemed_count > 0 ? `<span style="color:var(--accent-dark);font-size:0.82em;margin-left:4px;">已兑${r.redeemed_count}次</span>` : ''}
         </span>
         <span class="habit-pts">${r.threshold} 分</span>
@@ -496,7 +534,7 @@ function renderRewards(user) {
       const dateStr = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
       logHtml += `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.85em;">
-          <span>${log.reward_label} <span style="color:var(--text-muted);font-size:0.85em;">${dateStr}</span></span>
+          <span>${escapeHTML(log.reward_label)} <span style="color:var(--text-muted);font-size:0.85em;">${dateStr}</span></span>
           <span style="color:var(--accent-dark);font-weight:600;">-${log.threshold} 分</span>
         </div>`;
     });
@@ -549,7 +587,7 @@ function handleRewardDrop(e, dropIdx) {
 
 async function saveRewardOrder(user) {
   const ordered = (user?.rewards || []).map((r, i) => ({id: r.id, sort_order: i}));
-  const r = await fetch('/api/rewards/reorder', {
+  const r = await adminFetch('/api/rewards/reorder', {
     method: 'PUT', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({rewards: ordered})
   });
@@ -569,7 +607,7 @@ function showAdjustForm() {
   modal.id = 'adjust-modal';
   modal.innerHTML = `
     <div class="modal-card">
-      <div class="modal-title">✏️ 调整 ${user?.display_name || currentUserId} 的积分</div>
+      <div class="modal-title">✏️ 调整 ${escapeHTML(user?.display_name || currentUserId)} 的积分</div>
       <div id="adj-preview" style="background:var(--bg-secondary);border-radius:8px;padding:14px;margin-bottom:16px;text-align:center;">
         <div style="display:flex;justify-content:space-around;align-items:center;gap:8px;">
           <div><div style="font-size:0.78em;color:var(--text-muted);">当前</div><div style="font-size:1.4em;font-weight:700;" id="adj-current">${currentPts}</div></div>
@@ -610,7 +648,7 @@ async function saveAdjustment() {
   if (!amount) { alert('请输入调整值'); return; }
   if (!reason) { alert('请填写原因'); return; }
   try {
-    const r = await fetch('/api/admin/adjust-points', {
+    const r = await adminFetch('/api/admin/adjust-points', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({user_id: currentUserId, amount, reason})
     });
@@ -636,7 +674,7 @@ function showRewardForm(idx) {
       <div class="modal-title">${isEdit ? '编辑奖励' : '新增奖励'}</div>
       <div class="form-group">
         <label>奖励名称</label>
-        <input id="rf-label" value="${isEdit ? reward.label.replace(/'/g,"&#39;") : ''}" placeholder="如: 🍰 吃蛋糕" />
+        <input id="rf-label" value="${isEdit ? escapeAttr(reward.label) : ''}" placeholder="如: 🍰 吃蛋糕" />
       </div>
       <div class="form-group">
         <label>所需积分</label>
@@ -660,7 +698,7 @@ async function saveReward() {
       const user = dashboardData.find(u => u.id === currentUserId);
       const reward = user?.rewards?.[editingRewardIdx];
       if (reward && reward.id) {
-        const r = await fetch('/api/rewards/' + reward.id, {
+        const r = await adminFetch('/api/rewards/' + reward.id, {
           method: 'PUT', headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({user_id: currentUserId, threshold, label})
         });
@@ -668,7 +706,7 @@ async function saveReward() {
       }
       editingRewardIdx = null;
     } else {
-      const r = await fetch('/api/rewards', {
+      const r = await adminFetch('/api/rewards', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({user_id: currentUserId, threshold, label})
       });
@@ -688,7 +726,7 @@ async function deleteReward(idx) {
   if (!reward || !reward.id) { alert('未找到该奖励'); return; }
   if (reward.redeemed_count > 0) { alert('已兑换过的奖励不能删除'); return; }
   if (!confirm(`确定删除「${reward.label}」？`)) return;
-  const r = await fetch(`/api/rewards/${reward.id}`, {method: 'DELETE'});
+  const r = await adminFetch(`/api/rewards/${reward.id}`, {method: 'DELETE'});
   if (!r.ok) {
     alert('已兑换过的奖励不能删除');
     return;
@@ -708,7 +746,7 @@ function renderDailyDetail(user) {
   const dates = Object.keys(records).sort().reverse().slice(0, 30);
   tbody.innerHTML = dates.map(date => {
     const items = records[date] || [];
-    const labels = items.map(k => freq[k]?.label || k);
+    const labels = items.map(k => escapeHTML(freq[k]?.label || k));
     return `<tr><td>${date}</td><td>${labels.join('、') || '-'}</td><td>${items.length}</td></tr>`;
   }).join('');
 }
@@ -737,10 +775,10 @@ function renderHabitList() {
          ondragend="handleDragEnd(event)"
          ondrop="handleDrop(event, ${i})">
       <span class="drag-handle">⠿</span>
-      <span class="habit-info">${h.label}</span>
+      <span class="habit-info">${escapeHTML(h.label)}</span>
       <span class="habit-pts">${h.points} 分</span>
-      <button class="habit-edit-btn2" onclick="showHabitForm('${h.key}','${h.label.replace(/'/g,"\\'")}',${h.points})">编辑</button>
-      <button class="habit-del-btn2" onclick="deleteHabit('${h.key}','${h.label.replace(/'/g,"\\'")}')">×</button>
+      <button class="habit-edit-btn2" onclick="showHabitForm(${jsArg(h.key)},${jsArg(h.label)},${h.points})">编辑</button>
+      <button class="habit-del-btn2" onclick="deleteHabit(${jsArg(h.key)},${jsArg(h.label)})">×</button>
     </div>
   `).join('');
 }
@@ -777,7 +815,7 @@ function handleDrop(e, dropIdx) {
 
 async function saveOrder() {
   const ordered = habitsData.map((h, i) => ({key: h.key, sort_order: i}));
-  await fetch('/api/habits/reorder', {
+  await adminFetch('/api/habits/reorder', {
     method: 'PUT', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({habits: ordered})
   });
@@ -793,11 +831,11 @@ function showHabitForm(key, label, points) {
       <div class="modal-title">${isEdit ? '编辑习惯' : '新增习惯'}</div>
       <div class="form-group">
         <label>标识符（英文，唯一，保存后不可修改）</label>
-        <input id="hf-key" value="${isEdit ? key : ''}" ${isEdit ? 'readonly' : ''} placeholder="如: running" />
+        <input id="hf-key" value="${isEdit ? escapeAttr(key) : ''}" ${isEdit ? 'readonly' : ''} placeholder="如: running" />
       </div>
       <div class="form-group">
         <label>显示名称</label>
-        <input id="hf-label" value="${isEdit ? label : ''}" placeholder="如: 🏃 跑步" />
+        <input id="hf-label" value="${isEdit ? escapeAttr(label) : ''}" placeholder="如: 🏃 跑步" />
       </div>
       <div class="form-group">
         <label>积分</label>
@@ -816,7 +854,7 @@ async function saveHabit() {
   const label = document.getElementById('hf-label').value.trim();
   const points = parseInt(document.getElementById('hf-points').value) || 10;
   if (!key || !label) { alert('请填写完整'); return; }
-  await fetch('/api/habits', {
+  await adminFetch('/api/habits', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({user_id: 'me', key, label, points, sort_order: 99})
   });
@@ -827,7 +865,7 @@ async function saveHabit() {
 async function deleteHabit(key, label) {
   if (!confirm(`确定删除「${label}」？所有用户的此习惯和相关记录都会被清空。`)) return;
   if (!confirm('再次确认：此操作不可撤销。')) return;
-  await fetch(`/api/habits/${key}`, {method: 'DELETE'});
+  await adminFetch(`/api/habits/${encodeURIComponent(key)}`, {method: 'DELETE'});
   await loadHabits();
 }
 

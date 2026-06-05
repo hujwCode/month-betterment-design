@@ -1,10 +1,12 @@
 import os
 import logging
 import calendar
+import hashlib
+import secrets
 from typing import Optional
 from datetime import date, datetime, timedelta
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -83,15 +85,28 @@ def _sync_shared_reward_config(db: Session):
     for uid in ALL_USERS:
         if uid == CONFIG_USER_ID:
             continue
-        db.query(Reward).filter(Reward.user_id == uid).delete()
+        target_rewards = db.query(Reward).filter(Reward.user_id == uid).all()
+        targets_by_order = {reward.sort_order: reward for reward in target_rewards}
+        source_orders = {source.sort_order for source in source_rewards}
+
         for source in source_rewards:
-            db.add(Reward(
-                user_id=uid,
-                threshold=source.threshold,
-                label=source.label,
-                redeemed_count=0,
-                sort_order=source.sort_order,
-            ))
+            target = targets_by_order.get(source.sort_order)
+            if target:
+                target.threshold = source.threshold
+                target.label = source.label
+                target.sort_order = source.sort_order
+            else:
+                db.add(Reward(
+                    user_id=uid,
+                    threshold=source.threshold,
+                    label=source.label,
+                    redeemed_count=0,
+                    sort_order=source.sort_order,
+                ))
+
+        for reward in target_rewards:
+            if reward.sort_order not in source_orders and reward.redeemed_count == 0:
+                db.delete(reward)
 
 
 @app.on_event("startup")
@@ -209,6 +224,26 @@ class RewardReorderRequest(BaseModel):
     rewards: list[RewardReorderItem]
 
 
+# ── Admin auth ──
+
+ADMIN_PASSWORD = os.environ.get("MB_ADMIN_PASSWORD", "admin123")
+
+
+def _admin_token():
+    configured = os.environ.get("MB_ADMIN_TOKEN")
+    if configured:
+        return configured
+    return hashlib.sha256(
+        f"{ADMIN_PASSWORD}:dailystep-admin".encode("utf-8")
+    ).hexdigest()
+
+
+def require_admin(x_admin_token: Optional[str] = Header(default=None)):
+    expected = _admin_token()
+    if not x_admin_token or not secrets.compare_digest(x_admin_token, expected):
+        raise HTTPException(403, "Admin authentication required")
+
+
 # ── User / Habits ──
 
 @app.post("/api/login")
@@ -254,7 +289,11 @@ def get_habits(user_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/api/habits")
-def create_habit(req: HabitCreate, db: Session = Depends(get_db)):
+def create_habit(
+    req: HabitCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
     for uid in ALL_USERS:
         existing = db.query(Habit).filter(
             Habit.user_id == uid, Habit.key == req.key
@@ -274,7 +313,11 @@ def create_habit(req: HabitCreate, db: Session = Depends(get_db)):
 
 
 @app.delete("/api/habits/{key}")
-def delete_habit(key: str, db: Session = Depends(get_db)):
+def delete_habit(
+    key: str,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
     for uid in ALL_USERS:
         db.query(Record).filter(
             Record.user_id == uid, Record.habit_key == key
@@ -287,7 +330,11 @@ def delete_habit(key: str, db: Session = Depends(get_db)):
 
 
 @app.put("/api/habits/reorder")
-def reorder_habits(req: ReorderRequest, db: Session = Depends(get_db)):
+def reorder_habits(
+    req: ReorderRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
     for uid in ALL_USERS:
         for item in req.habits:
             habit = db.query(Habit).filter(
@@ -393,8 +440,8 @@ def _calc_points(user_id: str, db: Session):
 
 def _calc_weekly_stats(user_id: str, db: Session):
     today = datetime.now()
-    weekday = today.weekday()
-    week_start = datetime(today.year, today.month, today.day - weekday)
+    week_start = today - timedelta(days=today.weekday())
+    week_start = datetime(week_start.year, week_start.month, week_start.day)
     habit_keys = [h.key for h in db.query(Habit).filter(Habit.user_id == user_id).all()]
     total_possible = len(habit_keys)
     week_done = 0
@@ -463,7 +510,11 @@ def get_points(user_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/api/rewards")
-def create_reward(req: RewardCreate, db: Session = Depends(get_db)):
+def create_reward(
+    req: RewardCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
     count = db.query(Reward).filter(Reward.user_id == CONFIG_USER_ID).count()
     for uid in ALL_USERS:
         db.add(Reward(
@@ -520,7 +571,11 @@ def get_redemption_history(user_id: str, db: Session = Depends(get_db)):
 
 
 @app.put("/api/rewards/reorder")
-def reorder_rewards(req: RewardReorderRequest, db: Session = Depends(get_db)):
+def reorder_rewards(
+    req: RewardReorderRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
     if not req.rewards:
         raise HTTPException(400, "Rewards cannot be empty")
 
@@ -571,7 +626,12 @@ def reorder_rewards(req: RewardReorderRequest, db: Session = Depends(get_db)):
 
 
 @app.put("/api/rewards/{reward_id}")
-def update_reward(reward_id: int, req: RewardCreate, db: Session = Depends(get_db)):
+def update_reward(
+    reward_id: int,
+    req: RewardCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
     reward = db.query(Reward).filter(Reward.id == reward_id).first()
     if not reward:
         raise HTTPException(404, "Reward not found")
@@ -587,7 +647,11 @@ def update_reward(reward_id: int, req: RewardCreate, db: Session = Depends(get_d
 
 
 @app.delete("/api/rewards/{reward_id}")
-def delete_reward(reward_id: int, db: Session = Depends(get_db)):
+def delete_reward(
+    reward_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
     reward = db.query(Reward).filter(Reward.id == reward_id).first()
     if not reward:
         raise HTTPException(404, "Reward not found")
@@ -602,18 +666,19 @@ def delete_reward(reward_id: int, db: Session = Depends(get_db)):
 
 # ── Admin ──
 
-ADMIN_PASSWORD = os.environ.get("MB_ADMIN_PASSWORD", "admin123")
-
 
 @app.post("/api/admin/login")
 def admin_login(req: AdminLogin):
     if req.password != ADMIN_PASSWORD:
         raise HTTPException(403, "Invalid password")
-    return {"status": "ok"}
+    return {"status": "ok", "token": _admin_token()}
 
 
 @app.get("/api/admin/dashboard")
-def get_admin_dashboard(db: Session = Depends(get_db)):
+def get_admin_dashboard(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
     users = db.query(User).all()
     all_habits = db.query(Habit).all()
     all_records = db.query(Record).all()
@@ -683,7 +748,11 @@ def get_admin_dashboard(db: Session = Depends(get_db)):
 
 
 @app.post("/api/admin/adjust-points")
-def admin_adjust_points(req: AdjustPointsRequest, db: Session = Depends(get_db)):
+def admin_adjust_points(
+    req: AdjustPointsRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
     user = db.query(User).filter(User.id == req.user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
@@ -702,6 +771,7 @@ def admin_adjust_points(req: AdjustPointsRequest, db: Session = Depends(get_db))
 
 @app.get("/api/broadcasts")
 def get_broadcasts(limit: int = 50, db: Session = Depends(get_db)):
+    limit = max(1, min(limit, 100))
     broadcasts = db.query(Broadcast).order_by(
         Broadcast.created_at.desc()
     ).limit(limit).all()
@@ -731,6 +801,23 @@ def create_broadcast(req: BroadcastRequest, db: Session = Depends(get_db)):
         content=req.content,
     ))
     db.commit()
+    return {"status": "ok"}
+
+
+# ── Reset All Data ──
+
+@app.post("/api/reset-all")
+def reset_all_data(db: Session = Depends(get_db)):
+    """Reset all operational data for both users: records, redemptions,
+    point adjustments, broadcasts, and reward redemption counts."""
+    import sqlalchemy
+    db.execute(sqlalchemy.text("DELETE FROM records"))
+    db.execute(sqlalchemy.text("DELETE FROM redemption_logs"))
+    db.execute(sqlalchemy.text("DELETE FROM point_adjustments"))
+    db.execute(sqlalchemy.text("DELETE FROM broadcasts"))
+    db.execute(sqlalchemy.text("UPDATE rewards SET redeemed_count = 0"))
+    db.commit()
+    logger.info("All data reset complete")
     return {"status": "ok"}
 
 
