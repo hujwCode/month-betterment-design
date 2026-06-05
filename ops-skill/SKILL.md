@@ -155,7 +155,11 @@ server {
 }
 ```
 
-**🔴 CHECKPOINT**：修改后必须先用 `nginx -t` 验证语法，再 reload。语法错误直接 reload 会导致 nginx 挂掉。
+**🔴 CHECKPOINT**：修改后必须先用 `nginx -t` 验证语法，再 reload。语法错误直接 reload 会导致 nginx 挂掉。修改前建议备份当前配置：
+
+```bash
+cp /etc/nginx/sites-available/little-progress /etc/nginx/sites-available/little-progress.bak
+```
 
 ```bash
 nginx -t                     # 语法检查（必须返回 syntax is ok + test successful）
