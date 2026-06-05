@@ -7,16 +7,34 @@ description: "运维 Little Progress 服务器：查看状态、部署更新、�
 
 > 基于 Ubuntu 24.04 + Nginx + systemd + uvicorn 的 FastAPI 应用运维指南。
 
-## 快速命令速查
+## 快速开始
+
+> 第一次连这台服务器？先配好 SSH。
 
 ```bash
-# SSH 登录（本地配好密钥后）
-ssh little-progress-root
+# 本地生成密钥（如果没有的话）
+ssh-keygen -t ed25519 -f ~/.ssh/little-progress -N ""
 
-# 或直接 ssh root@43.153.155.195
+# 把公钥添加到服务器
+ssh-copy-id -i ~/.ssh/little-progress.pub root@43.153.155.195
+
+# 本地配置 SSH 别名（方便后续使用）
+cat >> ~/.ssh/config << 'EOF'
+Host little-progress-root
+  HostName 43.153.155.195
+  User root
+  IdentityFile ~/.ssh/little-progress
+  StrictHostKeyChecking no
+EOF
+
+# 测试连接
+ssh little-progress-root "hostname"
+# 预期输出：VM-0-4-ubuntu
 ```
 
-### 服务管理
+配好后用 `ssh little-progress-root` 登录。
+
+### 服务管理（每日运维）
 
 ```bash
 systemctl status little-progress   # 查看状态
@@ -44,6 +62,23 @@ systemctl restart little-progress
 
 ```bash
 bash /var/www/little-progress-server/update.sh
+```
+
+```bash
+# 完整部署预期输出
+cd /var/www/little-progress-server
+git pull origin main
+# Updating a1b2c3d..e4f5g6h
+# Fast-forward
+#  main.py | 2 +-
+#  1 file changed, 1 insertion(+), 1 deletion(-)
+
+systemctl restart little-progress
+# 无输出（静默成功）
+
+# 验证
+sleep 2 && curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/
+# 200
 ```
 
 **🔴 CHECKPOINT**：部署前确认已在本地 `git push` 成功。如果 git pull 报冲突，先 `git stash` 再试。
