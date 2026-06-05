@@ -1,10 +1,10 @@
 #!/bin/bash
-# DailyStep - 服务器部署脚本
+# Little Progress - 服务器部署脚本
 # 在 Ubuntu 服务器上以 root 或 ubuntu 用户运行
 
 set -e
 
-echo "🌿 开始部署 DailyStep"
+echo "🌿 开始部署 Little Progress"
 
 # 1. 安装依赖
 echo "📦 安装 Python 依赖..."
@@ -14,12 +14,12 @@ sudo apt-get install -y -qq python3-pip python3-venv
 # 2. 拉取代码
 echo "📥 拉取最新代码..."
 cd /var/www
-if [ -d dailystep-server ]; then
-  sudo rm -rf dailystep-server
+if [ -d little-progress-server ]; then
+  sudo rm -rf little-progress-server
 fi
-sudo git clone https://github.com/hujwCode/dailystep-server.git dailystep-server
-sudo chown -R ubuntu:ubuntu dailystep-server
-cd dailystep-server
+sudo git clone https://github.com/hujwCode/little-progress-server.git little-progress-server
+sudo chown -R ubuntu:ubuntu little-progress-server
+cd little-progress-server
 
 # 3. 创建虚拟环境并安装
 echo "🐍 配置 Python 环境..."
@@ -29,15 +29,15 @@ pip install -q -r requirements.txt
 
 # 4. 创建 systemd 服务
 echo "⚙️ 创建 systemd 服务..."
-sudo tee /etc/systemd/system/dailystep.service > /dev/null << 'SERVICE'
+sudo tee /etc/systemd/system/little-progress.service > /dev/null << 'SERVICE'
 [Unit]
-Description=DailyStep FastAPI
+Description=Little Progress FastAPI
 After=network.target
 
 [Service]
 User=ubuntu
-WorkingDirectory=/var/www/dailystep-server
-ExecStart=/var/www/dailystep-server/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+WorkingDirectory=/var/www/little-progress-server
+ExecStart=/var/www/little-progress-server/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5
 
@@ -47,7 +47,7 @@ SERVICE
 
 # 5. 更新 nginx 配置
 echo "🌐 更新 Nginx 配置..."
-sudo tee /etc/nginx/sites-available/dailystep > /dev/null << 'NGINX'
+sudo tee /etc/nginx/sites-available/little-progress > /dev/null << 'NGINX'
 server {
     listen 80;
     server_name 43.153.155.195;
@@ -62,15 +62,15 @@ server {
 }
 NGINX
 
-sudo ln -sf /etc/nginx/sites-available/dailystep /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/little-progress /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl restart nginx
 
 # 6. 启动后端服务
 echo "🚀 启动后端服务..."
 sudo systemctl daemon-reload
-sudo systemctl enable dailystep
-sudo systemctl restart dailystep
+sudo systemctl enable little-progress
+sudo systemctl restart little-progress
 
 # 7. 开放防火墙
 echo "🔥 配置防火墙..."
@@ -85,5 +85,5 @@ echo "📊 管理后台: http://43.153.155.195/admin.html"
 echo "🔐 后台密码: admin123"
 echo "========================"
 echo ""
-echo "查看运行状态: sudo systemctl status dailystep"
-echo "查看实时日志: sudo journalctl -u dailystep -f"
+echo "查看运行状态: sudo systemctl status little-progress"
+echo "查看实时日志: sudo journalctl -u little-progress -f"

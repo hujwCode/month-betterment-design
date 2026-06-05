@@ -1,18 +1,18 @@
 #!/bin/bash
-# DailyStep - 服务器更新脚本
+# Little Progress - 服务器更新脚本
 # 在服务器上运行：bash update.sh
 
 set -e
 
 echo "🌿 正在更新一个月变好计划..."
 
-cd /var/www/dailystep-server
+cd /var/www/little-progress-server
 
 echo "📥 拉取最新代码..."
 sudo git pull origin main
 
 echo "🚀 重启后端服务..."
-sudo systemctl restart dailystep
+sudo systemctl restart little-progress
 
 echo ""
 echo "========================"

@@ -234,7 +234,7 @@ def _admin_token():
     if configured:
         return configured
     return hashlib.sha256(
-        f"{ADMIN_PASSWORD}:dailystep-admin".encode("utf-8")
+        f"{ADMIN_PASSWORD}:little-progress-admin".encode("utf-8")
     ).hexdigest()
 
 

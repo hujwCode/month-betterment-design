@@ -36,7 +36,7 @@
 登录服务器，以 root 或 ubuntu 用户运行：
 
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/hujwCode/dailystep-design/main/deploy.sh)
+bash <(curl -sL https://raw.githubusercontent.com/hujwCode/little-progress-server/main/deploy.sh)
 ```
 
 部署脚本会自动完成：安装依赖 → 拉取代码 → 配置 Python 环境 → 创建 systemd 服务 → 配置 Nginx 反向代理 → 启动服务。
@@ -50,24 +50,24 @@ bash <(curl -sL https://raw.githubusercontent.com/hujwCode/dailystep-design/main
 sudo apt install -y python3-pip python3-venv nginx
 
 # 2. 拉取代码
-git clone https://github.com/hujwCode/dailystep-server.git /var/www/dailystep-server
+git clone https://github.com/hujwCode/little-progress-server.git /var/www/little-progress-server
 
 # 3. 配置 Python 环境
-cd /var/www/dailystep-server
+cd /var/www/little-progress-server
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
 # 4. 创建 systemd 服务
-sudo tee /etc/systemd/system/dailystep.service << 'EOF'
+sudo tee /etc/systemd/system/little-progress.service << 'EOF'
 [Unit]
-Description=DailyStep FastAPI
+Description=Little Progress FastAPI
 After=network.target
 
 [Service]
 User=ubuntu
-WorkingDirectory=/var/www/dailystep-server
-ExecStart=/var/www/dailystep-server/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+WorkingDirectory=/var/www/little-progress-server
+ExecStart=/var/www/little-progress-server/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5
 
@@ -76,11 +76,11 @@ WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl enable dailystep
-sudo systemctl start dailystep
+sudo systemctl enable little-progress
+sudo systemctl start little-progress
 
 # 5. 配置 Nginx 反向代理
-sudo tee /etc/nginx/sites-available/dailystep << 'EOF'
+sudo tee /etc/nginx/sites-available/little-progress << 'EOF'
 server {
     listen 80;
     server_name your-server-ip;
@@ -95,7 +95,7 @@ server {
 }
 EOF
 
-sudo ln -sf /etc/nginx/sites-available/dailystep /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/little-progress /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl restart nginx
 ```
@@ -105,14 +105,14 @@ sudo nginx -t && sudo systemctl restart nginx
 服务端运行：
 
 ```bash
-bash /var/www/dailystep-server/update.sh
+bash /var/www/little-progress-server/update.sh
 ```
 
 ### 本地开发
 
 ```bash
-git clone https://github.com/hujwCode/dailystep-server.git
-cd dailystep-server
+git clone https://github.com/hujwCode/little-progress-server.git
+cd little-progress-server
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -143,7 +143,7 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8080 --reload
 ## 项目结构
 
 ```
-dailystep-server/
+little-progress-server/
 ├── main.py              # FastAPI 应用（路由 + 业务逻辑）
 ├── models.py            # SQLAlchemy 数据模型
 ├── database.py          # 数据库连接配置
@@ -154,5 +154,5 @@ dailystep-server/
 │   ├── index.html       # 用户前端（打卡 + 积分 + 奖励）
 │   ├── admin.html       # 管理后台（看板 + 配置）
 │   └── versions.json    # 更新日志数据
-└── dailystep.db  # SQLite 数据库（自动创建）
+└── little-progress.db  # SQLite 数据库（自动创建）
 ```
