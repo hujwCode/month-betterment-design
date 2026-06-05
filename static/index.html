@@ -403,12 +403,33 @@ input, select { font-family: inherit; }
 </div>
 
 <script>
+function escapeHTML(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
+function escapeAttr(value) {
+  return escapeHTML(value);
+}
+
+function localDateString(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 const API = {
   async login(userId) {
     const r = await fetch('/api/login', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({user_id: userId})
     });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `请求失败 (${r.status})`);
+    }
     return r.json();
   },
   async toggle(userId, habitKey) {
@@ -491,11 +512,15 @@ const APP = {
 
   async selectUser(userId) {
     try {
-      this.data = await API.login(userId);
+      const data = await API.login(userId);
+      if (!data?.user?.id) {
+        throw new Error('登录响应格式异常，请刷新后重试');
+      }
+      this.data = data;
       localStorage.setItem('mb_user', userId);
       this.renderApp();
     } catch (e) {
-      alert('连接服务器失败: ' + e.message);
+      alert(e.message);
     }
   },
 
@@ -551,8 +576,8 @@ const APP = {
       return;
     }
 
-    // Always re-render broadcast tab for fresh data; cache other tabs
-    if (tab === 'broadcast' || !next.dataset.rendered) {
+    // Always re-render broadcast and rewards tabs for fresh data; cache other tabs
+    if (tab === 'broadcast' || tab === 'rewards' || !next.dataset.rendered) {
       if (tab !== 'broadcast') {
         next.innerHTML = '<div class="skeleton skel-bar"></div><div class="skeleton skel-card"></div>';
       }
@@ -599,10 +624,10 @@ const APP = {
     habits.forEach(h => {
       const done = records[h.key];
       html += `
-        <div class="habit-item ${done ? 'done' : ''}" onclick="APP.toggle('${h.key}')">
+        <div class="habit-item ${done ? 'done' : ''}" data-key="${escapeAttr(h.key)}" onclick="APP.toggle(this.dataset.key)">
           <div class="habit-check ${done ? 'checked' : ''}">${done ? '✓' : ''}</div>
           <div class="habit-info">
-            <div class="habit-label">${h.label}</div>
+            <div class="habit-label">${escapeHTML(h.label)}</div>
             <div class="habit-points">+${h.points} 分</div>
           </div>
         </div>`;
@@ -655,7 +680,7 @@ const APP = {
   async renderProgress() {
     const d = this.data;
     const today = new Date();
-    const todayStr = today.toISOString().slice(0,10);
+    const todayStr = localDateString(today);
     const year = today.getFullYear();
     const month = today.getMonth() + 1;
     const firstDay = new Date(year, month - 1, 1).getDay();
@@ -771,7 +796,7 @@ const APP = {
           html += `
             <div class="reward-item ${canAfford ? 'unlocked' : ''}">
               <div class="reward-info">
-                <div class="reward-label">${tierLabel} ${r.label}</div>
+                <div class="reward-label">${tierLabel} ${escapeHTML(r.label)}</div>
                 <div class="reward-threshold">${r.threshold} 分/次${redeemed > 0 ? ` · 已兑 ${redeemed} 次` : ''}</div>
               </div>
               ${canAfford ? `<button class="claim-btn" onclick="APP.claim(${r.id})">兑换</button>` : ''}
@@ -794,7 +819,7 @@ const APP = {
             html += `
               <div style="background:var(--bg-card);border-radius:var(--radius-sm);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border);">
                 <div>
-                  <span style="font-weight:500;">${h.reward_label}</span>
+                  <span style="font-weight:500;">${escapeHTML(h.reward_label)}</span>
                   <span style="font-size:0.78em;color:var(--text-muted);margin-left:8px;">${dateStr}</span>
                 </div>
                 <span style="color:var(--accent-dark);font-weight:600;font-size:0.9em;">-${h.threshold} 分</span>
@@ -828,7 +853,7 @@ const APP = {
 
     // User
     html += '<div class="settings-card">';
-    html += `<div class="setting-row"><span>当前用户</span><strong>${d.user.emoji} ${d.user.display_name}</strong></div>`;
+    html += `<div class="setting-row"><span>当前用户</span><strong>${escapeHTML(d.user.emoji)} ${escapeHTML(d.user.display_name)}</strong></div>`;
     html += `<button class="setting-btn" onclick="APP.switchUser()">🔄 切换用户</button>`;
     html += '</div>';
 
@@ -852,12 +877,12 @@ const APP = {
       versions.forEach(v => {
         vhtml += `<div class="version-card">
           <div class="version-header">
-            <span class="version-tag">v${v.version}</span>
-            <span class="version-date">${v.date}</span>
+            <span class="version-tag">v${escapeHTML(v.version)}</span>
+            <span class="version-date">${escapeHTML(v.date)}</span>
           </div>
-          <div class="version-title">${v.title}</div>
+          <div class="version-title">${escapeHTML(v.title)}</div>
           <ul class="version-changes">`;
-        v.changes.forEach(c => { vhtml += `<li>${c}</li>`; });
+        v.changes.forEach(c => { vhtml += `<li>${escapeHTML(c)}</li>`; });
         vhtml += '</ul></div>';
       });
       document.getElementById('version-log').innerHTML = vhtml || '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:0.85em;">暂无更新记录</div>';
@@ -873,9 +898,9 @@ const APP = {
   },
 
   async resetData() {
-    if (!confirm('⚠️ 确定要重置所有数据吗？')) return;
-    if (!confirm('再次确认：清空所有打卡记录？')) return;
-    await API.clearRecords(this.data.user.id);
+    if (!confirm('⚠️ 确定要重置所有数据吗？\n\n将清空：\n· 两用户的所有打卡记录\n· 所有积分调整记录\n· 所有兑换记录\n· 所有动态\n· 奖励兑换次数')) return;
+    if (!confirm('再次确认：不可撤销，确定重置？')) return;
+    await fetch('/api/reset-all', {method: 'POST'});
     this.data = await API.login(this.data.user.id);
     this.renderSettings();
   },
@@ -898,11 +923,11 @@ const APP = {
       <div class="ticker-icon"><span>📢</span></div>
       <div class="ticker-stage" id="ticker-stage">
         <div class="ticker-item" style="transform:translateY(0);opacity:1;">
-          <span class="ticker-text">${cur.user_emoji} ${cur.user_display_name} ${cur.content}</span>
+          <span class="ticker-text">${escapeHTML(cur.user_emoji)} ${escapeHTML(cur.user_display_name)} ${escapeHTML(cur.content)}</span>
           <span class="ticker-time">${curIcon} ${this.timeAgo(cur.created_at)}</span>
         </div>
         <div class="ticker-item" style="transform:translateY(24px);opacity:0;pointer-events:none;">
-          <span class="ticker-text">${next.user_emoji} ${next.user_display_name} ${next.content}</span>
+          <span class="ticker-text">${escapeHTML(next.user_emoji)} ${escapeHTML(next.user_display_name)} ${escapeHTML(next.content)}</span>
           <span class="ticker-time">${nextIcon} ${this.timeAgo(next.created_at)}</span>
         </div>
       </div>
@@ -965,7 +990,7 @@ const APP = {
 
       // Manual shout input
       html += `<div style="background:var(--bg-card);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:16px;display:flex;gap:8px;align-items:center;border:1px solid var(--border);">
-      <span>${d.user.emoji}</span>
+      <span>${escapeHTML(d.user.emoji)}</span>
       <input id="broadcast-input" placeholder="说句话..." style="flex:1;border:none;outline:none;font-size:0.9em;background:transparent;color:var(--text);" maxlength="200" onkeydown="if(event.key==='Enter')APP.sendBroadcast()" />
       <button class="claim-btn" onclick="APP.sendBroadcast()" style="padding:6px 16px;font-size:0.85em;">发送</button>
     </div>`;
@@ -978,10 +1003,10 @@ const APP = {
           const icon = b.type === 'manual' ? '💬' : '🔔';
           html += `
           <div style="background:var(--bg-card);border-radius:var(--radius-sm);padding:14px 16px;border:1px solid var(--border);display:flex;gap:10px;align-items:flex-start;">
-            <div style="width:32px;height:32px;border-radius:50%;background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${b.user_emoji}</div>
+            <div style="width:32px;height:32px;border-radius:50%;background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${escapeHTML(b.user_emoji)}</div>
             <div style="flex:1;min-width:0;">
               <div style="font-size:0.88em;color:var(--text);">
-                <strong>${b.user_display_name}</strong> ${b.content}
+                <strong>${escapeHTML(b.user_display_name)}</strong> ${escapeHTML(b.content)}
               </div>
               <div style="font-size:0.75em;color:var(--text-muted);margin-top:3px;">${icon} ${timeAgo}</div>
             </div>
@@ -1058,6 +1083,9 @@ function checkCelebrate() {
     document.getElementById('page-user-select').classList.remove('active');
     document.getElementById('page-main').classList.add('active');
     API.login(saved).then(data => {
+      if (!data?.user?.id) {
+        throw new Error('invalid data');
+      }
       APP.data = data;
       APP.renderApp();
     }).catch(() => {
