@@ -1,0 +1,5 @@
+[
+  {"id": 1, "prompt": "服务器访问码忘记了，我想查一下当前的访问码是什么，在哪里配置，怎么修改", "expected": "给出 ACCESS_CODE 环境变量的位置、默认值、修改方法（systemd Environment + daemon-reload + restart）"},
+  {"id": 2, "prompt": "网站打不开了，显示 ERR_CONNECTION_REFUSED，帮我排查一下", "expected": "给出分步骤排查：检查 Nginx 状态 → 检查端口 → 检查后端 → 检查腾讯云安全组"},
+  {"id": 3, "prompt": "我改完代码了，帮我部署到服务器上", "expected": "给出部署流程：git pull → 重启服务的命令，或指向 update.sh"}
+]
