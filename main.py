@@ -176,6 +176,7 @@ def on_startup():
 
 class LoginRequest(BaseModel):
     user_id: str
+    code: str = ""
 
 class HabitCreate(BaseModel):
     user_id: str
@@ -224,9 +225,10 @@ class RewardReorderRequest(BaseModel):
     rewards: list[RewardReorderItem]
 
 
-# ── Admin auth ──
+# ── Admin auth / Access code ──
 
 ADMIN_PASSWORD = os.environ.get("MB_ADMIN_PASSWORD", "admin123")
+ACCESS_CODE = os.environ.get("MB_ACCESS_CODE", "love2024")
 
 
 def _admin_token():
@@ -248,6 +250,8 @@ def require_admin(x_admin_token: Optional[str] = Header(default=None)):
 
 @app.post("/api/login")
 def api_login(req: LoginRequest, db: Session = Depends(get_db)):
+    if req.code != ACCESS_CODE:
+        raise HTTPException(403, "访问码错误")
     user = db.query(User).filter(User.id == req.user_id).first()
     if not user:
         raise HTTPException(404, "User not found")

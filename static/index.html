@@ -108,6 +108,30 @@ input, select { font-family: inherit; }
 .user-btn-emoji { font-size: 3.2em; }
 .user-btn-label { font-size: 1.2em; font-weight: 600; color: var(--text); }
 
+/* ── Access code ── */
+.access-code-card {
+  background: var(--bg-card); border-radius: var(--radius);
+  padding: 32px; box-shadow: var(--shadow); text-align: center;
+  max-width: 320px; margin: 0 auto;
+}
+.access-code-label { font-size: 1.1em; margin-bottom: 20px; font-weight: 600; }
+.access-code-input {
+  width: 100%; padding: 14px; border: 2px solid var(--border);
+  border-radius: var(--radius-sm); font-size: 1.2em; text-align: center;
+  outline: none; letter-spacing: 4px; margin-bottom: 20px;
+  background: var(--bg-card); color: var(--text); transition: border-color 0.2s;
+}
+.access-code-input:focus { border-color: var(--accent); }
+.verify-btn {
+  display: inline-block; padding: 12px 48px;
+  background: var(--accent-dark); color: white; border-radius: var(--radius-sm);
+  font-size: 1em; cursor: pointer; transition: opacity 0.2s;
+  -webkit-tap-highlight-color: transparent; user-select: none;
+}
+.verify-btn:active { opacity: 0.8; }
+.verify-btn-disabled { opacity: 0.5; pointer-events: none; }
+.divider-line { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+
 #page-main { flex-direction: column; min-height: 100dvh; }
 #main-header {
   display: flex; justify-content: space-between; align-items: center;
@@ -363,16 +387,28 @@ input, select { font-family: inherit; }
       <div class="app-title">✨ 小进步</div>
       <div class="user-select-motto" id="daily-motto"></div>
     </div>
-    <p class="app-subtitle">选一个人开始打卡</p>
-    <div class="user-buttons">
-      <button class="user-btn" onclick="APP.selectUser('me')">
-        <span class="user-btn-emoji">🙋</span>
-        <span class="user-btn-label">我</span>
-      </button>
-      <button class="user-btn" onclick="APP.selectUser('wife')">
-        <span class="user-btn-emoji">👑</span>
-        <span class="user-btn-label">女王大人</span>
-      </button>
+    <!-- Step 1: 访问码输入 -->
+    <div id="step-access-code" class="step-access-code">
+      <div class="access-code-card">
+        <div class="access-code-label">🔐 输入访问码</div>
+        <input class="access-code-input" type="password" id="code-input" placeholder="请输入" maxlength="20" autocomplete="off" />
+        <div class="verify-btn" id="verify-btn" onclick="APP.verifyCode()">确 认</div>
+      </div>
+    </div>
+    <!-- Step 2: 选择用户 -->
+    <div id="step-select-user" style="display:none;">
+      <hr class="divider-line" />
+      <p class="app-subtitle">选一个人开始打卡</p>
+      <div class="user-buttons">
+        <button class="user-btn" onclick="APP.selectUser('me')">
+          <span class="user-btn-emoji">🙋</span>
+          <span class="user-btn-label">我</span>
+        </button>
+        <button class="user-btn" onclick="APP.selectUser('wife')">
+          <span class="user-btn-emoji">👑</span>
+          <span class="user-btn-label">女王大人</span>
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -421,10 +457,10 @@ function localDateString(date = new Date()) {
 }
 
 const API = {
-  async login(userId) {
+  async login(userId, code) {
     const r = await fetch('/api/login', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({user_id: userId})
+      body: JSON.stringify({user_id: userId, code: code || ''})
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
@@ -509,10 +545,39 @@ const APP = {
   broadcasts: [],
   broadcastTimer: null,
   broadcastIdx: 0,
+  verifying: false,
+
+  /* ── Access code verification ── */
+
+  verifyCode() {
+    const input = document.getElementById('code-input');
+    const code = input ? input.value.trim() : '';
+    if (!code) { alert('请输入访问码'); return; }
+    if (this.verifying) return;
+    this.verifying = true;
+    const btn = document.getElementById('verify-btn');
+    btn.textContent = '验证中...';
+    btn.classList.add('verify-btn-disabled');
+
+    API.login('me', code)
+      .then(() => {
+        localStorage.setItem('mb_code', code);
+        this.verifying = false;
+        document.getElementById('step-access-code').style.display = 'none';
+        document.getElementById('step-select-user').style.display = 'block';
+      })
+      .catch(err => {
+        this.verifying = false;
+        btn.textContent = '确 认';
+        btn.classList.remove('verify-btn-disabled');
+        alert(err.message || '访问码错误');
+      });
+  },
 
   async selectUser(userId) {
+    const code = localStorage.getItem('mb_code') || '';
     try {
-      const data = await API.login(userId);
+      const data = await API.login(userId, code);
       if (!data?.user?.id) {
         throw new Error('登录响应格式异常，请刷新后重试');
       }
@@ -526,9 +591,10 @@ const APP = {
 
   async autoLogin() {
     const saved = localStorage.getItem('mb_user');
-    if (saved) {
+    const code = localStorage.getItem('mb_code');
+    if (saved && code) {
       try {
-        this.data = await API.login(saved);
+        this.data = await API.login(saved, code);
         this.renderApp();
         return true;
       } catch (_) {
@@ -855,6 +921,7 @@ const APP = {
     html += '<div class="settings-card">';
     html += `<div class="setting-row"><span>当前用户</span><strong>${escapeHTML(d.user.emoji)} ${escapeHTML(d.user.display_name)}</strong></div>`;
     html += `<button class="setting-btn" onclick="APP.switchUser()">🔄 切换用户</button>`;
+    html += `<button class="setting-btn" onclick="APP.logout()" style="margin-top:8px">🚪 退出登录</button>`;
     html += '</div>';
 
     // Data
@@ -895,13 +962,29 @@ const APP = {
     localStorage.removeItem('mb_user');
     document.getElementById('page-main').classList.remove('active');
     document.getElementById('page-user-select').classList.add('active');
+    // Already code-verified → go straight to user selection
+    document.getElementById('step-access-code').style.display = 'none';
+    document.getElementById('step-select-user').style.display = 'block';
+  },
+
+  logout() {
+    if (!confirm('确定要退出登录吗？下次需要重新输入访问码。')) return;
+    localStorage.removeItem('mb_user');
+    localStorage.removeItem('mb_code');
+    this.data = null;
+    document.getElementById('page-main').classList.remove('active');
+    document.getElementById('page-user-select').classList.add('active');
+    document.getElementById('step-access-code').style.display = 'block';
+    document.getElementById('step-select-user').style.display = 'none';
+    document.getElementById('code-input').value = '';
   },
 
   async resetData() {
     if (!confirm('⚠️ 确定要重置所有数据吗？\n\n将清空：\n· 两用户的所有打卡记录\n· 所有积分调整记录\n· 所有兑换记录\n· 所有动态\n· 奖励兑换次数')) return;
     if (!confirm('再次确认：不可撤销，确定重置？')) return;
     await fetch('/api/reset-all', {method: 'POST'});
-    this.data = await API.login(this.data.user.id);
+    const code = localStorage.getItem('mb_code') || '';
+    this.data = await API.login(this.data.user.id, code);
     this.renderSettings();
   },
 
@@ -1078,11 +1161,20 @@ function checkCelebrate() {
 /* ── Init: auto-login on page load ── */
 (function init() {
   initWelcomePage();
+  const code = localStorage.getItem('mb_code');
   const saved = localStorage.getItem('mb_user');
-  if (saved) {
+
+  // Code saved → show user selection directly
+  if (code && !saved) {
+    document.getElementById('step-access-code').style.display = 'none';
+    document.getElementById('step-select-user').style.display = 'block';
+  }
+
+  // Both code + user saved → auto login
+  if (saved && code) {
     document.getElementById('page-user-select').classList.remove('active');
     document.getElementById('page-main').classList.add('active');
-    API.login(saved).then(data => {
+    API.login(saved, code).then(data => {
       if (!data?.user?.id) {
         throw new Error('invalid data');
       }
@@ -1092,8 +1184,16 @@ function checkCelebrate() {
       localStorage.removeItem('mb_user');
       document.getElementById('page-user-select').classList.add('active');
       document.getElementById('page-main').classList.remove('active');
+      // Still show code as verified
+      document.getElementById('step-access-code').style.display = 'none';
+      document.getElementById('step-select-user').style.display = 'block';
     });
   }
+
+  // Enter key handler for code input
+  document.getElementById('code-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') APP.verifyCode();
+  });
 })();
 </script>
 </body>
