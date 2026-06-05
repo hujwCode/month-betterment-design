@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.5.0",
+    "date": "2026-06-05",
+    "title": "HTTPS + 访问码验证 + 项目改名",
+    "changes": [
+      "新增访问码验证：打开网页需要先输入密码才能进入选人页面",
+      "HTTPS 支持：配置 Let's Encrypt SSL 证书，HTTP 自动跳转 HTTPS",
+      "新增 🚪 退出登录功能：清除访问码和用户，回到密码输入页",
+      "登录响应校验：修复后端异常时显示「Cannot read property emoji」的空白页",
+      "项目改名：Little Progress（little-progress-server）"
+    ]
+  },
+  {
     "version": "2.4.1",
     "date": "2026-06-01",
     "title": "稳定性与安全优化",
