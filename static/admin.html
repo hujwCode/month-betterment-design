@@ -213,7 +213,7 @@ function escapeAttr(value) {
 }
 
 function jsArg(value) {
-  return JSON.stringify(String(value ?? ''));
+  return "'" + String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
 }
 
 function localDateString(date = new Date()) {
@@ -372,8 +372,6 @@ function renderHeatmap(user) {
   html += '</div>';
   container.innerHTML = html;
 
-  // Refresh detail if a date is selected
-  if (selectedDate) showDateDetail(selectedDate);
 }
 
 function showDateDetail(dateStr) {
